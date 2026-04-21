@@ -1,4 +1,4 @@
-# Wanderlog Exporter
+# Listo
 
 A Chrome extension that exports your Wanderlog trip plan as a clean, immigration-ready PDF — covering flights, hotels, and places to visit.
 
