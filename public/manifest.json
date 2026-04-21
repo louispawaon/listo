@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Listo",
+  "version": "0.1.0",
+  "description": "Export your Wanderlog itinerary as a clean, immigration-ready PDF.",
+  "permissions": ["scripting"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "host_permissions": [
+    "https://wanderlog.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://wanderlog.com/plan/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Listo"
+  }
+}
