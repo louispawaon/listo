@@ -3,6 +3,11 @@
   "name": "Listo",
   "version": "0.1.0",
   "description": "Export your Wanderlog itinerary as a clean, immigration-ready PDF.",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
   "permissions": ["scripting"],
   "background": {
     "service_worker": "background.js"
@@ -19,6 +24,11 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Listo"
+    "default_title": "Listo",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
   }
 }

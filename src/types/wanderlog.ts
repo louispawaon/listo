@@ -110,7 +110,7 @@ export interface WanderlogItinerary {
 }
 
 export interface WanderlogTripPlan {
-  name: string;
+  title: string;
   startDate: string;  // "YYYY-MM-DD"
   endDate: string;    // "YYYY-MM-DD"
   itinerary: WanderlogItinerary;

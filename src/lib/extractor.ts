@@ -125,8 +125,8 @@ function safeString(val: unknown): string | null {
   return typeof val === "string" && val.trim().length > 0 ? val.trim() : null;
 }
 
-/** Trip title for PDF — Wanderlog occasionally omits `name`. */
-function safeTripName(val: unknown): string {
+/** Trip title for PDF — Wanderlog occasionally omits `title`. */
+function safeTripTitle(val: unknown): string {
   const s = safeString(val);
   return s !== null ? s : "Untitled trip";
 }
@@ -453,7 +453,7 @@ export function extractTripData(mobxState?: unknown): ExtractionResult {
     );
 
     const data: TripData = {
-      name: safeTripName(tripPlan.name),
+      name: safeTripTitle(tripPlan.title),
       startDate: tripPlan.startDate,
       endDate: tripPlan.endDate,
       flights,
