@@ -560,7 +560,7 @@ export function TripPDFDocument({ trip, generatedAt }: TripPDFDocumentProps): Re
   return (
     <Document
       title={`${trip.name} — Travel Itinerary`}
-      author="Wanderlog Exporter"
+      author="Listo"
       subject="Immigration Travel Document"
       keywords="itinerary, travel, immigration"
     >

@@ -11,7 +11,7 @@ function Popup(): React.ReactElement {
       color: "#1a1a1a",
     }}>
       <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8 }}>
-        Wanderlog Exporter
+        Listo
       </div>
       <p style={{ margin: "0 0 12px", color: "#555", lineHeight: 1.5 }}>
         Open your Wanderlog trip plan, then click the{" "}
