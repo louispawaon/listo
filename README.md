@@ -1,60 +1,84 @@
 # Listo
 
-A Chrome extension that exports your Wanderlog trip plan as a clean, immigration-ready PDF — covering flights, hotels, and places to visit.
+Listo is a Chrome extension that exports your Wanderlog trip plan as a clean, immigration-ready PDF covering flights, hotels, and places to visit.
 
-## How it works
+## Overview
 
-When you're on a Wanderlog plan page, the extension reads your trip data directly from the page's MobX state (`window.__MOBX_STATE__.tripPlanStore`) and generates a formatted PDF document locally in your browser. No data is sent to any server.
+On `wanderlog.com/plan/*` pages, the extension reads trip data from Wanderlog's in-page MobX state (`window.__MOBX_STATE__.tripPlanStore`) and generates the PDF locally in your browser.
 
-## Project structure
+No trip data is sent to any external server.
 
-```
+## Features
+
+- One-click export from a Wanderlog plan page
+- Structured PDF output for travel and immigration documents
+- Local-only processing for privacy
+
+## Tech Stack
+
+- TypeScript
+- React
+- Chrome Extension (Manifest V3)
+- React PDF rendering
+
+## Project Structure
+
+```text
 src/
 ├── types/
-│   ├── wanderlog.ts     # Raw MobX store types (mirrors Wanderlog's shape)
-│   └── trip.ts          # Clean normalized types for our app layer
+│   ├── wanderlog.ts        # Raw MobX store types (Wanderlog shape)
+│   └── trip.ts             # Normalized app-level trip types
 ├── lib/
-│   ├── extractor.ts     # Reads + validates the MobX store → TripData
-│   └── formatters.ts    # Date/time formatting utilities
+│   ├── extractor.ts        # Reads + validates MobX store -> TripData
+│   └── formatters.ts       # Date/time formatting utilities
 ├── pdf/
-│   ├── TripPDFDocument.tsx  # React PDF document template
-│   └── generator.ts         # Triggers PDF generation + download
+│   ├── TripPDFDocument.tsx # React PDF document template
+│   └── generator.tsx       # PDF generation + download trigger
 ├── content/
-│   └── index.ts         # Content script — injects the Export button
+│   └── index.ts            # Content script (injects Export button)
 └── popup/
-    └── index.tsx         # Extension toolbar popup UI
+    └── index.tsx           # Extension popup UI
 ```
 
-## Setup
+## Installation
+
+### 1) Install dependencies
 
 ```bash
-npm install
-npm run build
+pnpm install
 ```
 
-Then in Chrome:
-1. Go to `chrome://extensions`
+### 2) Build the extension
+
+```bash
+pnpm run build
+```
+
+### 3) Load in Chrome
+
+1. Open `chrome://extensions`
 2. Enable **Developer mode**
 3. Click **Load unpacked**
-4. Select the `dist/` folder
+4. Select the `dist/` directory
 
 ## Development
 
 ```bash
-npm run dev       # watch mode
-npm run typecheck # type checking only
-npm run lint      # ESLint
+pnpm run dev        # Build in watch mode
+pnpm run typecheck  # TypeScript checks only
+pnpm run lint       # ESLint
 ```
 
 ## Usage
 
-1. Go to your Wanderlog trip at `wanderlog.com/plan/...`
-2. Wait for the page to fully load
-3. Click the **⬇ Export PDF** button at the bottom-right corner
-4. PDF downloads automatically
+1. Open your trip at `https://wanderlog.com/plan/...`
+2. Wait for the page content to finish loading
+3. Click **⬇ Export PDF** in the bottom-right corner
+4. The PDF downloads automatically
 
-## Notes
+## Maintenance Notes
 
-- The extension only activates on `wanderlog.com/plan/*` pages
-- No permissions beyond reading the current tab's page content are required
-- If Wanderlog updates their internal store structure, `src/types/wanderlog.ts` and `src/lib/extractor.ts` are the only files that need updating
+- The extension only runs on `wanderlog.com/plan/*`
+- If Wanderlog changes their internal store shape, update:
+  - `src/types/wanderlog.ts`
+  - `src/lib/extractor.ts`
