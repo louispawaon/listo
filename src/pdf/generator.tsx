@@ -1,6 +1,9 @@
 /**
  * Triggers PDF generation and download in the browser.
  * Uses @react-pdf/renderer's pdf() function directly (no iframe needed).
+ *
+ * The generator takes a fully edited `ListoDocument` — all user edits in the
+ * editor are reflected in the PDF. It does not read the original `TripData`.
  */
 
 import React from "react";
@@ -9,15 +12,15 @@ import { safeDownloadBasename } from "../lib/downloadFilename";
 import { TripPDFDocument } from "./TripPDFDocument";
 import { ensureFontsForScripts } from "./fonts";
 import { detectScripts } from "./scriptDetect";
-import type { TripData } from "../types/trip";
+import type { ListoDocument } from "../types/listo";
 
 export type GenerationResult =
   | { success: true }
   | { success: false; error: string };
 
-export async function generateAndDownloadPDF(trip: TripData): Promise<GenerationResult> {
+export async function generateAndDownloadPDF(doc: ListoDocument): Promise<GenerationResult> {
   try {
-    ensureFontsForScripts(detectScripts(trip));
+    ensureFontsForScripts(detectScripts(doc));
 
     const generatedAt = new Date().toLocaleDateString("en-PH", {
       year: "numeric",
@@ -28,19 +31,16 @@ export async function generateAndDownloadPDF(trip: TripData): Promise<Generation
     });
 
     const blob = await pdf(
-      <TripPDFDocument trip={trip} generatedAt={generatedAt} />
+      <TripPDFDocument doc={doc} generatedAt={generatedAt} />
     ).toBlob();
 
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `${safeDownloadBasename(trip.name, "Itinerary")}_Itinerary.pdf`;
+    anchor.download = `${safeDownloadBasename(doc.meta.name, "Itinerary")}_Itinerary.pdf`;
     anchor.click();
 
-    // Cleanup
-    setTimeout(() => {
-      URL.revokeObjectURL(url);
-    }, 10_000);
+    setTimeout(() => { URL.revokeObjectURL(url); }, 10_000);
 
     return { success: true };
   } catch (err) {

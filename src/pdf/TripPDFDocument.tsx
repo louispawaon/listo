@@ -2,9 +2,8 @@
  * PDF document template for immigration use.
  * Designed to be clean, formal, and easy to scan at a border.
  *
- * Layout:
- *   Page 1 — Cover: trip summary, flight records, accommodation
- *   Page 2+ — Places to visit (overflow if many entries)
+ * Rendering order follows the document: sections are emitted in their current
+ * drag-sorted order, then the daily itinerary table is appended.
  */
 
 import React from "react";
@@ -15,7 +14,16 @@ import {
   View,
   StyleSheet,
 } from "@react-pdf/renderer";
-import type { TripData, TripFlight, TripHotel, TripItineraryDay, TripPlace } from "../types/trip";
+import type {
+  Activity,
+  ListoDocument,
+  ListoFlightBlock,
+  ListoHotelBlock,
+  ListoNoteBlock,
+  ListoPlaceBlock,
+  ListoSection,
+  TripDay,
+} from "../types/listo";
 import { formatDate, formatDateRange, formatTime, nightsBetween } from "../lib/formatters";
 // Side-effect import: registers Noto Sans (base) + hyphenation policy at module load.
 import { FONT_FAMILY, getFontFamilyChain } from "./fonts";
@@ -35,9 +43,6 @@ const COLOR = {
   accent: "#1a1a1a",
 } as const;
 
-// Font family is registered in `./fonts` (Noto Sans + lazy per-script fallbacks).
-// Bold/italic faces are selected via `fontWeight` / `fontStyle` — inheritance
-// from the page-level `fontFamily` carries the family down the tree.
 const WEIGHT = {
   bold: "bold",
 } as const;
@@ -60,9 +65,7 @@ const styles = StyleSheet.create({
   },
 
   // ── Cover header ──
-  coverHeader: {
-    marginBottom: 28,
-  },
+  coverHeader: { marginBottom: 28 },
   coverEyebrow: {
     fontSize: 7.5,
     letterSpacing: 1.8,
@@ -94,13 +97,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLOR.surface,
     padding: 12,
     marginBottom: 28,
-    marginTop: 0,
     borderBottomLeftRadius: 4,
     borderBottomRightRadius: 4,
   },
-  summaryItem: {
-    flex: 1,
-  },
+  summaryItem: { flex: 1 },
   summaryLabel: {
     fontSize: 7,
     letterSpacing: 1.2,
@@ -115,9 +115,7 @@ const styles = StyleSheet.create({
   },
 
   // ── Section ──
-  section: {
-    marginBottom: 26,
-  },
+  section: { marginBottom: 26 },
   sectionHeader: {
     fontSize: 7.5,
     letterSpacing: 1.8,
@@ -146,13 +144,8 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3,
     borderLeftColor: COLOR.accent,
   },
-  flightLeg: {
-    flex: 2,
-  },
-  flightLegRight: {
-    flex: 2,
-    alignItems: "flex-end",
-  },
+  flightLeg: { flex: 2 },
+  flightLegRight: { flex: 2, alignItems: "flex-end" },
   flightIata: {
     fontSize: 20,
     fontWeight: WEIGHT.bold,
@@ -175,10 +168,7 @@ const styles = StyleSheet.create({
     color: COLOR.lightGray,
     marginTop: 1,
   },
-  flightMiddle: {
-    flex: 1,
-    alignItems: "center",
-  },
+  flightMiddle: { flex: 1, alignItems: "center" },
   flightNumber: {
     fontSize: 9,
     fontWeight: WEIGHT.bold,
@@ -217,12 +207,8 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     lineHeight: 1.4,
   },
-  hotelMetaRow: {
-    flexDirection: "row",
-  },
-  hotelMetaItem: {
-    flex: 1,
-  },
+  hotelMetaRow: { flexDirection: "row" },
+  hotelMetaItem: { flex: 1 },
   metaLabel: {
     fontSize: 7,
     letterSpacing: 1,
@@ -246,13 +232,8 @@ const styles = StyleSheet.create({
     marginTop: 10,
     paddingTop: 8,
   },
-  hotelContact: {
-    flexDirection: "row",
-    gap: 16,
-  },
-  hotelContactItem: {
-    flex: 1,
-  },
+  hotelContact: { flexDirection: "row", gap: 16 },
+  hotelContactItem: { flex: 1 },
 
   // ── Places table ──
   placesTable: {
@@ -266,9 +247,7 @@ const styles = StyleSheet.create({
     borderBottomColor: COLOR.ruleLight,
     alignItems: "flex-start",
   },
-  placeRowAlt: {
-    backgroundColor: COLOR.surface,
-  },
+  placeRowAlt: { backgroundColor: COLOR.surface },
   placeIndex: {
     width: 20,
     fontSize: 8,
@@ -297,6 +276,27 @@ const styles = StyleSheet.create({
     paddingTop: 1,
   },
 
+  // ── Notes list ──
+  noteRow: {
+    marginBottom: 8,
+    padding: 10,
+    backgroundColor: COLOR.surface,
+    borderRadius: 4,
+    borderLeftWidth: 3,
+    borderLeftColor: COLOR.accent,
+  },
+  noteTitle: {
+    fontSize: 10,
+    fontWeight: WEIGHT.bold,
+    color: COLOR.black,
+    marginBottom: 3,
+  },
+  noteContent: {
+    fontSize: 9,
+    color: COLOR.darkGray,
+    lineHeight: 1.4,
+  },
+
   // ── Daily itinerary table ──
   itineraryTable: {
     borderTopWidth: 1,
@@ -311,6 +311,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   itineraryHeaderTime: {
+    width: 60,
+    fontSize: 7.5,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    color: COLOR.midGray,
+  },
+  itineraryHeaderKind: {
     width: 72,
     fontSize: 7.5,
     letterSpacing: 1,
@@ -344,15 +351,35 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   itineraryTime: {
-    width: 72,
+    width: 60,
     fontSize: 8.5,
     color: COLOR.darkGray,
+  },
+  itineraryKind: {
+    width: 72,
+    fontSize: 8.5,
+    color: COLOR.midGray,
   },
   itineraryPlace: {
     flex: 1,
     fontSize: 9,
     color: COLOR.black,
     lineHeight: 1.35,
+  },
+  itineraryNotes: {
+    fontSize: 8,
+    color: COLOR.midGray,
+    marginTop: 2,
+    fontStyle: STYLE.italic,
+  },
+  itineraryEmptyDay: {
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    fontSize: 8.5,
+    color: COLOR.lightGray,
+    fontStyle: STYLE.italic,
+    borderBottomWidth: 1,
+    borderBottomColor: COLOR.ruleLight,
   },
 
   // ── Footer ──
@@ -367,30 +394,24 @@ const styles = StyleSheet.create({
     borderTopColor: COLOR.ruleLight,
     paddingTop: 7,
   },
-  footerText: {
-    fontSize: 7,
-    color: COLOR.lightGray,
-  },
-  pageNumber: {
-    fontSize: 7,
-    color: COLOR.lightGray,
-  },
+  footerText: { fontSize: 7, color: COLOR.lightGray },
+  pageNumber: { fontSize: 7, color: COLOR.lightGray },
 });
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-interface FlightCardProps {
-  flight: TripFlight;
-}
-
-function FlightCard({ flight }: FlightCardProps): React.ReactElement {
+function FlightCardView({ flight }: { flight: ListoFlightBlock }): React.ReactElement {
   return (
     <View style={styles.flightCard}>
       <View style={styles.flightLeg}>
-        <Text style={styles.flightIata}>{flight.depart.airportIata}</Text>
+        <Text style={styles.flightIata}>{flight.depart.airportIata || "—"}</Text>
         <Text style={styles.flightCity}>{flight.depart.airportName}</Text>
-        <Text style={styles.flightTime}>{formatTime(flight.depart.time)}</Text>
-        <Text style={styles.flightDate}>{formatDate(flight.depart.date)}</Text>
+        <Text style={styles.flightTime}>
+          {flight.depart.time !== "" ? formatTime(flight.depart.time) : "—"}
+        </Text>
+        <Text style={styles.flightDate}>
+          {flight.depart.date !== "" ? formatDate(flight.depart.date) : ""}
+        </Text>
       </View>
 
       <View style={styles.flightMiddle}>
@@ -400,36 +421,43 @@ function FlightCard({ flight }: FlightCardProps): React.ReactElement {
       </View>
 
       <View style={styles.flightLegRight}>
-        <Text style={styles.flightIata}>{flight.arrive.airportIata}</Text>
+        <Text style={styles.flightIata}>{flight.arrive.airportIata || "—"}</Text>
         <Text style={styles.flightCity}>{flight.arrive.airportName}</Text>
-        <Text style={styles.flightTime}>{formatTime(flight.arrive.time)}</Text>
-        <Text style={styles.flightDate}>{formatDate(flight.arrive.date)}</Text>
+        <Text style={styles.flightTime}>
+          {flight.arrive.time !== "" ? formatTime(flight.arrive.time) : "—"}
+        </Text>
+        <Text style={styles.flightDate}>
+          {flight.arrive.date !== "" ? formatDate(flight.arrive.date) : ""}
+        </Text>
       </View>
     </View>
   );
 }
 
-interface HotelCardProps {
-  hotel: TripHotel;
-}
-
-function HotelCard({ hotel }: HotelCardProps): React.ReactElement {
-  const nights = nightsBetween(hotel.checkIn, hotel.checkOut);
+function HotelCardView({ hotel }: { hotel: ListoHotelBlock }): React.ReactElement {
+  const nights =
+    hotel.checkIn !== "" && hotel.checkOut !== ""
+      ? nightsBetween(hotel.checkIn, hotel.checkOut)
+      : 0;
   const hasContact = hotel.phone !== null || hotel.website !== null;
 
   return (
     <View style={styles.hotelCard}>
-      <Text style={styles.hotelName}>{hotel.name}</Text>
-      <Text style={styles.hotelAddress}>{hotel.address}</Text>
+      <Text style={styles.hotelName}>{hotel.name || "Unnamed hotel"}</Text>
+      {hotel.address !== "" && <Text style={styles.hotelAddress}>{hotel.address}</Text>}
 
       <View style={styles.hotelMetaRow}>
         <View style={styles.hotelMetaItem}>
           <Text style={styles.metaLabel}>Check-in</Text>
-          <Text style={styles.metaValue}>{formatDate(hotel.checkIn)}</Text>
+          <Text style={styles.metaValue}>
+            {hotel.checkIn !== "" ? formatDate(hotel.checkIn) : "—"}
+          </Text>
         </View>
         <View style={styles.hotelMetaItem}>
           <Text style={styles.metaLabel}>Check-out</Text>
-          <Text style={styles.metaValue}>{formatDate(hotel.checkOut)}</Text>
+          <Text style={styles.metaValue}>
+            {hotel.checkOut !== "" ? formatDate(hotel.checkOut) : "—"}
+          </Text>
         </View>
         <View style={styles.hotelMetaItem}>
           <Text style={styles.metaLabel}>Nights</Text>
@@ -467,11 +495,7 @@ function HotelCard({ hotel }: HotelCardProps): React.ReactElement {
   );
 }
 
-interface PlacesTableProps {
-  places: TripPlace[];
-}
-
-function PlacesTable({ places }: PlacesTableProps): React.ReactElement {
+function PlacesTableView({ places }: { places: ListoPlaceBlock[] }): React.ReactElement {
   return (
     <View style={styles.placesTable}>
       {places.map((place, index) => (
@@ -480,7 +504,7 @@ function PlacesTable({ places }: PlacesTableProps): React.ReactElement {
           style={[styles.placeRow, index % 2 !== 0 ? styles.placeRowAlt : {}]}
         >
           <Text style={styles.placeIndex}>{index + 1}.</Text>
-          <Text style={styles.placeName}>{place.name}</Text>
+          <Text style={styles.placeName}>{place.name || "Unnamed place"}</Text>
           <Text style={styles.placeAddress}>{place.address}</Text>
           <Text style={styles.placeRating}>
             {place.rating > 0 ? `★ ${place.rating.toFixed(1)}` : "—"}
@@ -491,28 +515,131 @@ function PlacesTable({ places }: PlacesTableProps): React.ReactElement {
   );
 }
 
-interface ItineraryTableProps {
-  itineraryDays: TripItineraryDay[];
+function NotesListView({ notes }: { notes: ListoNoteBlock[] }): React.ReactElement {
+  return (
+    <View>
+      {notes.map((note) => (
+        <View key={note.id} style={styles.noteRow}>
+          {note.title !== "" && <Text style={styles.noteTitle}>{note.title}</Text>}
+          {note.content !== "" && <Text style={styles.noteContent}>{note.content}</Text>}
+        </View>
+      ))}
+    </View>
+  );
 }
 
-function ItineraryTable({ itineraryDays }: ItineraryTableProps): React.ReactElement {
+function SectionBody({ section }: { section: ListoSection }): React.ReactElement {
+  if (section.blocks.length === 0) {
+    return (
+      <Text style={styles.emptySection}>
+        No {section.kind} recorded.
+      </Text>
+    );
+  }
+
+  switch (section.kind) {
+    case "flights": {
+      const flights = section.blocks.filter(
+        (b): b is ListoFlightBlock => b.type === "flight"
+      );
+      return (
+        <View>
+          {flights.map((flight) => (
+            <FlightCardView key={flight.id} flight={flight} />
+          ))}
+        </View>
+      );
+    }
+    case "hotels": {
+      const hotels = section.blocks.filter(
+        (b): b is ListoHotelBlock => b.type === "hotel"
+      );
+      return (
+        <View>
+          {hotels.map((hotel) => (
+            <HotelCardView key={hotel.id} hotel={hotel} />
+          ))}
+        </View>
+      );
+    }
+    case "places": {
+      const places = section.blocks.filter(
+        (b): b is ListoPlaceBlock => b.type === "place"
+      );
+      return <PlacesTableView places={places} />;
+    }
+    case "notes": {
+      const notes = section.blocks.filter(
+        (b): b is ListoNoteBlock => b.type === "note"
+      );
+      return <NotesListView notes={notes} />;
+    }
+  }
+}
+
+// ─── Daily itinerary ─────────────────────────────────────────────────────────
+
+function activityKindLabel(activity: Activity): string {
+  if (activity.source === "manual") {
+    switch (activity.kind) {
+      case "meal":
+        return "Meal";
+      case "transport":
+        return "Transport";
+      case "activity":
+        return "Activity";
+      case "note":
+        return "Note";
+    }
+  }
+  switch (activity.kind) {
+    case "flight":
+      return "Flight";
+    case "hotel":
+      return "Hotel";
+    case "place":
+      return "Place";
+    case "note":
+      return "Note";
+  }
+}
+
+function formatActivityTime(activity: Activity): string {
+  if (activity.time === undefined || activity.time === "") return "—";
+  return formatTime(activity.time);
+}
+
+function ItineraryTableView({ days }: { days: TripDay[] }): React.ReactElement {
   return (
     <View style={styles.itineraryTable}>
       <View style={styles.itineraryHeader}>
         <Text style={styles.itineraryHeaderTime}>Time</Text>
-        <Text style={styles.itineraryHeaderPlace}>Place / Activity</Text>
+        <Text style={styles.itineraryHeaderKind}>Kind</Text>
+        <Text style={styles.itineraryHeaderPlace}>Activity</Text>
       </View>
-      {itineraryDays.map((day) => (
-        <View key={`${day.label}-${day.date ?? "na"}`}>
+      {days.map((day) => (
+        <View key={day.id}>
           <View style={styles.itineraryDayRow}>
             <Text style={styles.itineraryDayLabel}>{day.label}</Text>
           </View>
-          {day.rows.map((row, index) => (
-            <View key={`${day.label}-${index}`} style={styles.itineraryRow}>
-              <Text style={styles.itineraryTime}>{row.time ?? ""}</Text>
-              <Text style={styles.itineraryPlace}>{row.place}</Text>
-            </View>
-          ))}
+          {day.activities.length === 0 ? (
+            <Text style={styles.itineraryEmptyDay}>No activities planned.</Text>
+          ) : (
+            day.activities.map((activity) => (
+              <View key={activity.id} style={styles.itineraryRow}>
+                <Text style={styles.itineraryTime}>{formatActivityTime(activity)}</Text>
+                <Text style={styles.itineraryKind}>{activityKindLabel(activity)}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.itineraryPlace}>{activity.label}</Text>
+                  {activity.source === "manual" &&
+                    activity.notes !== undefined &&
+                    activity.notes !== "" && (
+                      <Text style={styles.itineraryNotes}>{activity.notes}</Text>
+                    )}
+                </View>
+              </View>
+            ))
+          )}
         </View>
       ))}
     </View>
@@ -522,44 +649,39 @@ function ItineraryTable({ itineraryDays }: ItineraryTableProps): React.ReactElem
 // ─── Summary helpers ──────────────────────────────────────────────────────────
 
 function tripDurationNights(startDate: string, endDate: string): number {
+  if (startDate === "" || endDate === "") return 0;
   const a = new Date(`${startDate}T00:00:00`).getTime();
   const b = new Date(`${endDate}T00:00:00`).getTime();
+  if (Number.isNaN(a) || Number.isNaN(b)) return 0;
   return Math.round((b - a) / (1000 * 60 * 60 * 24));
 }
 
-function destinationSummary(hotels: TripHotel[], flights: TripFlight[]): string {
-  // Prefer hotel cities; fall back to flight arrival cities
-  if (hotels.length > 0) {
-    const cities = [...new Set(hotels.map((h) => h.address.split(",").pop()?.trim() ?? ""))].filter(
-      Boolean
-    );
-    if (cities.length > 0) return cities.join(", ");
-  }
-  if (flights.length > 0) {
-    const cities = [...new Set(flights.map((f) => f.arrive.city))];
-    return cities.join(", ");
-  }
-  return "—";
+function countBlocks(doc: ListoDocument, kind: ListoSection["kind"]): number {
+  return doc.sections
+    .filter((s) => s.kind === kind)
+    .reduce((acc, s) => acc + s.blocks.length, 0);
 }
 
 // ─── Main Document ────────────────────────────────────────────────────────────
 
 interface TripPDFDocumentProps {
-  trip: TripData;
+  doc: ListoDocument;
   generatedAt: string;
 }
 
-export function TripPDFDocument({ trip, generatedAt }: TripPDFDocumentProps): React.ReactElement {
-  const nights = tripDurationNights(trip.startDate, trip.endDate);
-  const destination = destinationSummary(trip.hotels, trip.flights);
-  // Snapshot the current chain at render time — `ensureFontsForScripts`
-  // has already run by this point (see generator.tsx). The array form is
-  // react-pdf v4's per-codepoint fallback mechanism.
+export function TripPDFDocument({ doc, generatedAt }: TripPDFDocumentProps): React.ReactElement {
+  const nights = tripDurationNights(doc.meta.startDate, doc.meta.endDate);
+  const destination = doc.meta.destination.trim() !== "" ? doc.meta.destination : "—";
   const fontFamily = [...getFontFamilyChain()];
+
+  const dateRange =
+    doc.meta.startDate !== "" && doc.meta.endDate !== ""
+      ? formatDateRange(doc.meta.startDate, doc.meta.endDate)
+      : "";
 
   return (
     <Document
-      title={`${trip.name} — Travel Itinerary`}
+      title={`${doc.meta.name} — Travel Itinerary`}
       author="Listo"
       subject="Immigration Travel Document"
       keywords="itinerary, travel, immigration"
@@ -569,8 +691,8 @@ export function TripPDFDocument({ trip, generatedAt }: TripPDFDocumentProps): Re
         {/* ── Cover header ── */}
         <View style={styles.coverHeader}>
           <Text style={styles.coverEyebrow}>Travel Itinerary</Text>
-          <Text style={styles.coverTitle}>{trip.name}</Text>
-          <Text style={styles.coverDates}>{formatDateRange(trip.startDate, trip.endDate)}</Text>
+          <Text style={styles.coverTitle}>{doc.meta.name || "Untitled trip"}</Text>
+          {dateRange !== "" && <Text style={styles.coverDates}>{dateRange}</Text>}
           <View style={styles.coverDivider} />
         </View>
 
@@ -578,7 +700,9 @@ export function TripPDFDocument({ trip, generatedAt }: TripPDFDocumentProps): Re
         <View style={styles.summaryBar}>
           <View style={styles.summaryItem}>
             <Text style={styles.summaryLabel}>Duration</Text>
-            <Text style={styles.summaryValue}>{nights} night{nights !== 1 ? "s" : ""}</Text>
+            <Text style={styles.summaryValue}>
+              {nights} night{nights !== 1 ? "s" : ""}
+            </Text>
           </View>
           <View style={styles.summaryItem}>
             <Text style={styles.summaryLabel}>Destination</Text>
@@ -586,59 +710,35 @@ export function TripPDFDocument({ trip, generatedAt }: TripPDFDocumentProps): Re
           </View>
           <View style={styles.summaryItem}>
             <Text style={styles.summaryLabel}>Flights</Text>
-            <Text style={styles.summaryValue}>{trip.flights.length}</Text>
+            <Text style={styles.summaryValue}>{countBlocks(doc, "flights")}</Text>
           </View>
           <View style={styles.summaryItem}>
             <Text style={styles.summaryLabel}>Hotels</Text>
-            <Text style={styles.summaryValue}>{trip.hotels.length}</Text>
+            <Text style={styles.summaryValue}>{countBlocks(doc, "hotels")}</Text>
           </View>
           <View style={styles.summaryItem}>
             <Text style={styles.summaryLabel}>Places</Text>
-            <Text style={styles.summaryValue}>{trip.places.length}</Text>
+            <Text style={styles.summaryValue}>{countBlocks(doc, "places")}</Text>
           </View>
         </View>
+
+        {/* ── Sections in document order ── */}
+        {doc.sections.map((section) => (
+          <View key={section.id} style={styles.section}>
+            <Text style={styles.sectionHeader}>{section.heading}</Text>
+            <SectionBody section={section} />
+          </View>
+        ))}
 
         {/* ── Daily itinerary ── */}
-        <View style={styles.section}>
+        <View style={styles.section} break>
           <Text style={styles.sectionHeader}>Daily Itinerary</Text>
-          {trip.itineraryDays.length === 0 ? (
-            <Text style={styles.emptySection}>No daily itinerary entries found.</Text>
+          {doc.days.length === 0 ? (
+            <Text style={styles.emptySection}>No daily itinerary entries.</Text>
           ) : (
-            <ItineraryTable itineraryDays={trip.itineraryDays} />
+            <ItineraryTableView days={doc.days} />
           )}
         </View>
-
-        {/* ── Flights ── */}
-        <View style={styles.section}>
-          <Text style={styles.sectionHeader}>Flight Records</Text>
-          {trip.flights.length === 0 ? (
-            <Text style={styles.emptySection}>No flights recorded.</Text>
-          ) : (
-            trip.flights.map((flight) => (
-              <FlightCard key={flight.id} flight={flight} />
-            ))
-          )}
-        </View>
-
-        {/* ── Hotels ── */}
-        <View style={styles.section}>
-          <Text style={styles.sectionHeader}>Accommodation</Text>
-          {trip.hotels.length === 0 ? (
-            <Text style={styles.emptySection}>No accommodations recorded.</Text>
-          ) : (
-            trip.hotels.map((hotel) => (
-              <HotelCard key={hotel.id} hotel={hotel} />
-            ))
-          )}
-        </View>
-
-        {/* ── Places (only if they fit on the same page, else new page) ── */}
-        {trip.places.length > 0 && (
-          <View style={styles.section} break={trip.hotels.length > 2}>
-            <Text style={styles.sectionHeader}>Places to Visit</Text>
-            <PlacesTable places={trip.places} />
-          </View>
-        )}
 
         {/* ── Footer ── */}
         <View style={styles.footer} fixed>

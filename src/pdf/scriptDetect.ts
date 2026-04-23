@@ -1,5 +1,5 @@
 /**
- * Detects which non-Latin writing systems appear in a trip's text fields.
+ * Detects which non-Latin writing systems appear in a document's text fields.
  * The result drives lazy font registration in `./fonts` — we only ship
  * fallback TTFs for scripts that are actually present in the data.
  *
@@ -8,7 +8,7 @@
  * Vietnamese) without triggering a download.
  */
 
-import type { TripData } from "../types/trip";
+import type { ListoDocument } from "../types/listo";
 
 export type ScriptTag =
   | "thai"
@@ -24,38 +24,55 @@ const SCRIPT_RANGES: readonly ScriptRange[] = [
   { tag: "thai", test: /[\u0E00-\u0E7F]/ },
 ];
 
-/** Concatenates every user-facing string from a trip into a scan buffer. */
-function collectText(trip: TripData): string {
-  const parts: string[] = [trip.name];
+/** Concatenates every user-facing string from a Listo document into a scan buffer. */
+function collectText(doc: ListoDocument): string {
+  const parts: string[] = [doc.meta.name, doc.meta.destination];
 
-  for (const flight of trip.flights) {
-    parts.push(
-      flight.airline,
-      flight.depart.airportName, flight.depart.city,
-      flight.arrive.airportName, flight.arrive.city,
-    );
+  for (const section of doc.sections) {
+    parts.push(section.heading);
+    for (const block of section.blocks) {
+      switch (block.type) {
+        case "flight":
+          parts.push(
+            block.airline,
+            block.flightNumber,
+            block.depart.airportName,
+            block.depart.city,
+            block.arrive.airportName,
+            block.arrive.city,
+          );
+          break;
+        case "hotel":
+          parts.push(block.name, block.address);
+          if (block.confirmationNumber !== null) parts.push(block.confirmationNumber);
+          if (block.phone !== null) parts.push(block.phone);
+          if (block.website !== null) parts.push(block.website);
+          break;
+        case "place":
+          parts.push(block.name, block.address);
+          break;
+        case "note":
+          parts.push(block.title, block.content);
+          break;
+      }
+    }
   }
-  for (const hotel of trip.hotels) {
-    parts.push(hotel.name, hotel.address);
-    if (hotel.confirmationNumber !== null) parts.push(hotel.confirmationNumber);
-    if (hotel.phone !== null) parts.push(hotel.phone);
-    if (hotel.website !== null) parts.push(hotel.website);
-  }
-  for (const place of trip.places) {
-    parts.push(place.name, place.address);
-  }
-  for (const day of trip.itineraryDays) {
+
+  for (const day of doc.days) {
     parts.push(day.label);
-    for (const row of day.rows) {
-      parts.push(row.place);
+    for (const activity of day.activities) {
+      parts.push(activity.label);
+      if (activity.source === "manual" && activity.notes !== undefined) {
+        parts.push(activity.notes);
+      }
     }
   }
 
   return parts.join("\n");
 }
 
-export function detectScripts(trip: TripData): ReadonlySet<ScriptTag> {
-  const blob = collectText(trip);
+export function detectScripts(doc: ListoDocument): ReadonlySet<ScriptTag> {
+  const blob = collectText(doc);
   const hits = new Set<ScriptTag>();
   for (const { tag, test } of SCRIPT_RANGES) {
     if (test.test(blob)) {
