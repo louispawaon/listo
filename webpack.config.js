@@ -1,11 +1,13 @@
 const path = require("path");
 const CopyPlugin = require("copy-webpack-plugin");
+const MiniCssExtractPlugin = require("mini-css-extract-plugin");
 
 module.exports = {
   entry: {
     background: "./src/background/index.ts",
     content: "./src/content/index.ts",
     popup: "./src/popup/index.tsx",
+    editor: "./src/editor/index.tsx",
   },
   output: {
     path: path.resolve(__dirname, "dist"),
@@ -30,7 +32,11 @@ module.exports = {
       },
       {
         test: /\.css$/,
-        use: ["style-loader", "css-loader"],
+        use: [
+          MiniCssExtractPlugin.loader,
+          "css-loader",
+          "postcss-loader",
+        ],
       },
     ],
   },
@@ -41,9 +47,13 @@ module.exports = {
       "@lib": path.resolve(__dirname, "src/lib"),
       "@pdf": path.resolve(__dirname, "src/pdf"),
       "@content": path.resolve(__dirname, "src/content"),
+      "@editor": path.resolve(__dirname, "src/editor"),
     },
   },
   plugins: [
+    new MiniCssExtractPlugin({
+      filename: "[name].css",
+    }),
     new CopyPlugin({
       patterns: [
         { from: "public", to: "." },
