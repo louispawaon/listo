@@ -7,6 +7,8 @@ import React from "react";
 import { pdf } from "@react-pdf/renderer";
 import { safeDownloadBasename } from "../lib/downloadFilename";
 import { TripPDFDocument } from "./TripPDFDocument";
+import { ensureFontsForScripts } from "./fonts";
+import { detectScripts } from "./scriptDetect";
 import type { TripData } from "../types/trip";
 
 export type GenerationResult =
@@ -15,6 +17,8 @@ export type GenerationResult =
 
 export async function generateAndDownloadPDF(trip: TripData): Promise<GenerationResult> {
   try {
+    ensureFontsForScripts(detectScripts(trip));
+
     const generatedAt = new Date().toLocaleDateString("en-PH", {
       year: "numeric",
       month: "long",

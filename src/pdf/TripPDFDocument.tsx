@@ -17,6 +17,8 @@ import {
 } from "@react-pdf/renderer";
 import type { TripData, TripFlight, TripHotel, TripItineraryDay, TripPlace } from "../types/trip";
 import { formatDate, formatDateRange, formatTime, nightsBetween } from "../lib/formatters";
+// Side-effect import: registers Noto Sans (base) + hyphenation policy at module load.
+import { FONT_FAMILY, getFontFamilyChain } from "./fonts";
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 
@@ -33,17 +35,22 @@ const COLOR = {
   accent: "#1a1a1a",
 } as const;
 
-const FONT = {
-  regular: "Helvetica",
-  bold: "Helvetica-Bold",
-  oblique: "Helvetica-Oblique",
+// Font family is registered in `./fonts` (Noto Sans + lazy per-script fallbacks).
+// Bold/italic faces are selected via `fontWeight` / `fontStyle` — inheritance
+// from the page-level `fontFamily` carries the family down the tree.
+const WEIGHT = {
+  bold: "bold",
+} as const;
+
+const STYLE = {
+  italic: "italic",
 } as const;
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   page: {
-    fontFamily: FONT.regular,
+    fontFamily: FONT_FAMILY,
     fontSize: 10,
     paddingTop: 52,
     paddingBottom: 52,
@@ -65,7 +72,7 @@ const styles = StyleSheet.create({
   },
   coverTitle: {
     fontSize: 24,
-    fontFamily: FONT.bold,
+    fontWeight: WEIGHT.bold,
     color: COLOR.black,
     marginBottom: 5,
     lineHeight: 1.2,
@@ -103,7 +110,7 @@ const styles = StyleSheet.create({
   },
   summaryValue: {
     fontSize: 10,
-    fontFamily: FONT.bold,
+    fontWeight: WEIGHT.bold,
     color: COLOR.black,
   },
 
@@ -124,7 +131,7 @@ const styles = StyleSheet.create({
   emptySection: {
     fontSize: 9,
     color: COLOR.lightGray,
-    fontFamily: FONT.oblique,
+    fontStyle: STYLE.italic,
     paddingVertical: 6,
   },
 
@@ -148,7 +155,7 @@ const styles = StyleSheet.create({
   },
   flightIata: {
     fontSize: 20,
-    fontFamily: FONT.bold,
+    fontWeight: WEIGHT.bold,
     letterSpacing: 0.5,
     color: COLOR.black,
   },
@@ -159,7 +166,7 @@ const styles = StyleSheet.create({
   },
   flightTime: {
     fontSize: 10,
-    fontFamily: FONT.bold,
+    fontWeight: WEIGHT.bold,
     marginTop: 5,
     color: COLOR.darkGray,
   },
@@ -174,7 +181,7 @@ const styles = StyleSheet.create({
   },
   flightNumber: {
     fontSize: 9,
-    fontFamily: FONT.bold,
+    fontWeight: WEIGHT.bold,
     color: COLOR.darkGray,
     marginBottom: 3,
   },
@@ -200,7 +207,7 @@ const styles = StyleSheet.create({
   },
   hotelName: {
     fontSize: 11,
-    fontFamily: FONT.bold,
+    fontWeight: WEIGHT.bold,
     marginBottom: 3,
     color: COLOR.black,
   },
@@ -225,13 +232,13 @@ const styles = StyleSheet.create({
   },
   metaValue: {
     fontSize: 9,
-    fontFamily: FONT.bold,
+    fontWeight: WEIGHT.bold,
     color: COLOR.black,
   },
   metaValueMuted: {
     fontSize: 9,
     color: COLOR.lightGray,
-    fontFamily: FONT.oblique,
+    fontStyle: STYLE.italic,
   },
   hotelDivider: {
     borderTopWidth: 1,
@@ -271,7 +278,7 @@ const styles = StyleSheet.create({
   placeName: {
     flex: 2,
     fontSize: 9,
-    fontFamily: FONT.bold,
+    fontWeight: WEIGHT.bold,
     color: COLOR.black,
     lineHeight: 1.4,
   },
@@ -326,7 +333,7 @@ const styles = StyleSheet.create({
   },
   itineraryDayLabel: {
     fontSize: 9,
-    fontFamily: FONT.bold,
+    fontWeight: WEIGHT.bold,
     color: COLOR.black,
   },
   itineraryRow: {
@@ -545,6 +552,10 @@ interface TripPDFDocumentProps {
 export function TripPDFDocument({ trip, generatedAt }: TripPDFDocumentProps): React.ReactElement {
   const nights = tripDurationNights(trip.startDate, trip.endDate);
   const destination = destinationSummary(trip.hotels, trip.flights);
+  // Snapshot the current chain at render time — `ensureFontsForScripts`
+  // has already run by this point (see generator.tsx). The array form is
+  // react-pdf v4's per-codepoint fallback mechanism.
+  const fontFamily = [...getFontFamilyChain()];
 
   return (
     <Document
@@ -553,7 +564,7 @@ export function TripPDFDocument({ trip, generatedAt }: TripPDFDocumentProps): Re
       subject="Immigration Travel Document"
       keywords="itinerary, travel, immigration"
     >
-      <Page size="A4" style={styles.page}>
+      <Page size="A4" style={[styles.page, { fontFamily }]}>
 
         {/* ── Cover header ── */}
         <View style={styles.coverHeader}>
