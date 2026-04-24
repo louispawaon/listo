@@ -15,6 +15,8 @@
  */
 
 import type { TripData, TripItineraryRow } from "../types/trip";
+import { effectiveTripBounds, enumerateInclusiveRange } from "./calendarDates";
+import { pickInboundFlight } from "./flightHeuristics";
 import type {
   ListoDocument,
   ListoFlightBlock,
@@ -47,12 +49,21 @@ function uuid(): string {
 // ─── Meta derivation ─────────────────────────────────────────────────────────
 
 function deriveDestination(tripData: TripData): string {
+  const geoName = tripData.destinationGeoName?.trim() ?? "";
+  const geoCountry = tripData.destinationGeoCountryName?.trim() ?? "";
+  if (geoName.length > 0 && geoCountry.length > 0) {
+    return `${geoName}, ${geoCountry}`;
+  }
+  if (geoName.length > 0) return geoName;
+  if (geoCountry.length > 0) return geoCountry;
+
   if (tripData.flights.length > 0) {
-    const last = tripData.flights[tripData.flights.length - 1];
-    if (last !== undefined) {
-      const city = last.arrive.city.trim();
-      if (city.length > 0) return city;
-    }
+    // Use the outbound (inbound-to-trip) leg — same heuristic as itinerary
+    // auto-rows — not the last listed flight, which is often the return home.
+    const primary =
+      pickInboundFlight(tripData.flights, tripData.startDate) ?? tripData.flights[0]!;
+    const city = primary.arrive.city.trim();
+    if (city.length > 0) return city;
   }
   if (tripData.hotels.length > 0) {
     const first = tripData.hotels[0];
@@ -154,22 +165,16 @@ function buildSections(tripData: TripData): ListoSection[] {
 
 // ─── Day generation ──────────────────────────────────────────────────────────
 
-function enumerateDateRange(startDate: string, endDate: string): string[] {
-  const start = new Date(`${startDate}T00:00:00`);
-  const end = new Date(`${endDate}T00:00:00`);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-    return [];
-  }
-  const days: string[] = [];
-  const cursor = new Date(start);
-  // Inclusive of both ends; guard against runaway loops.
-  let safety = 0;
-  while (cursor.getTime() <= end.getTime() && safety < 365) {
-    days.push(cursor.toISOString().slice(0, 10));
-    cursor.setDate(cursor.getDate() + 1);
-    safety += 1;
-  }
-  return days;
+/** Skeleton dates: calendar-safe enumeration, expanded for flight/hotel/itinerary keys. */
+function skeletonDateList(tripData: TripData): string[] {
+  const expanded = effectiveTripBounds(
+    tripData.startDate,
+    tripData.endDate,
+    tripData.flights,
+    tripData.hotels,
+    tripData.itineraryDays.map((d) => d.date)
+  );
+  return enumerateInclusiveRange(expanded.start, expanded.end);
 }
 
 function formatDayLabel(date: string, index: number): string {
@@ -207,7 +212,7 @@ function toManualActivity(row: TripItineraryRow, order: number): ManualActivity 
 }
 
 function buildDays(tripData: TripData): TripDay[] {
-  const dateList = enumerateDateRange(tripData.startDate, tripData.endDate);
+  const dateList = skeletonDateList(tripData);
 
   // If we couldn't parse the trip range, fall back to whatever days the
   // extractor produced so we don't lose data.
@@ -222,12 +227,15 @@ function buildDays(tripData: TripData): TripDay[] {
   }
 
   const rowsByDate = new Map<string, TripItineraryRow[]>();
-  // Prefer matches by date; extractor emits date-tagged days first. For days
-  // that only have a label (no date), we cannot safely align them, so they are
-  // dropped in favour of the chronological skeleton.
+  // Prefer matches by date; merge rows when multiple TripItineraryDay share the same date.
   for (const day of tripData.itineraryDays) {
     if (day.date !== null) {
-      rowsByDate.set(day.date, day.rows);
+      const existing = rowsByDate.get(day.date);
+      if (existing === undefined) {
+        rowsByDate.set(day.date, [...day.rows]);
+      } else {
+        existing.push(...day.rows);
+      }
     }
   }
 
