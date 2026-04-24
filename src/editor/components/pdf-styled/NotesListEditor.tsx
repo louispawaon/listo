@@ -80,7 +80,7 @@ function SortableNote({ note, onChange, onRemove }: SortableNoteProps): React.Re
   });
 
   const wrapperStyle: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
+    transform: CSS.Translate.toString(transform),
     transition,
     opacity: isDragging ? 0.6 : 1,
   };

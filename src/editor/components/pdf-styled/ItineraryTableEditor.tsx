@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   DndContext,
   PointerSensor,
@@ -79,6 +79,41 @@ function buildLocationMap(days: TripDay[]): Map<string, ActivityLocation> {
   return m;
 }
 
+/**
+ * Live "projected" cross-day move. While the user is dragging an activity
+ * over another day, we apply this locally to produce a `displayDays` that
+ * reflects where the row will land — the dragged row visually relocates
+ * into the target day and existing rows there shift to make room, exactly
+ * like within-day sortable feedback. We only commit to the reducer on
+ * drag end.
+ */
+interface PendingMove {
+  activityId: string;
+  fromDayId: string;
+  toDayId: string;
+  toIndex: number;
+}
+
+function applyPendingMove(days: TripDay[], move: PendingMove): TripDay[] {
+  const fromDay = days.find((d) => d.id === move.fromDayId);
+  if (fromDay === undefined) return days;
+  const activity = fromDay.activities.find((a) => a.id === move.activityId);
+  if (activity === undefined) return days;
+  return days.map((day) => {
+    const withoutActive = day.activities.filter((a) => a.id !== move.activityId);
+    if (day.id !== move.toDayId) {
+      return { ...day, activities: withoutActive };
+    }
+    const clamped = Math.max(0, Math.min(move.toIndex, withoutActive.length));
+    const activities = [
+      ...withoutActive.slice(0, clamped),
+      activity,
+      ...withoutActive.slice(clamped),
+    ];
+    return { ...day, activities };
+  });
+}
+
 export function ItineraryTableEditor({
   days,
   onActivityChange,
@@ -92,49 +127,115 @@ export function ItineraryTableEditor({
   );
 
   const [activeActivityId, setActiveActivityId] = useState<string | null>(null);
+  const [pendingMove, setPendingMove] = useState<PendingMove | null>(null);
+
+  // Projected view of `days` during drag. When a cross-day hover is in
+  // progress, the dragged row is virtually relocated into the target day
+  // so SortableContext animates neighbours to make room — the same
+  // feedback we already get for intra-day drags.
+  const displayDays = useMemo<TripDay[]>(() => {
+    if (pendingMove === null) return days;
+    return applyPendingMove(days, pendingMove);
+  }, [days, pendingMove]);
 
   const handleDragStart = (event: DragStartEvent): void => {
     setActiveActivityId(String(event.active.id));
+    setPendingMove(null);
   };
 
-  const handleDragOver = (_event: DragOverEvent): void => {
-    // We don't mutate state on over (no live re-ordering across containers).
-    // The visual feedback is handled by dnd-kit's overlay + our dashed
-    // `.listo-drop-target` outline on empty day rows.
-  };
-
-  const handleDragEnd = (event: DragEndEvent): void => {
-    setActiveActivityId(null);
+  const handleDragOver = (event: DragOverEvent): void => {
     const { active, over } = event;
     if (over === null) return;
 
     const activeId = String(active.id);
     const overId = String(over.id);
+    if (activeId === overId) return;
 
-    const locs = buildLocationMap(days);
-    const activeLoc = locs.get(activeId);
-    if (activeLoc === undefined) return;
+    // Origin is read from the stable `days` prop (reducer doesn't run mid-drag).
+    const originLocs = buildLocationMap(days);
+    const originLoc = originLocs.get(activeId);
+    if (originLoc === undefined) return;
 
-    // `over` might be another activity (by id) or an empty day's droppable
-    // (id prefixed with "day:").
+    // Target day + index is read from the projected view so the hover
+    // target stays consistent as pendingMove updates.
+    const displayLocs = buildLocationMap(displayDays);
+
+    let toDayId: string;
+    let toIndex: number;
+
     if (overId.startsWith("day:")) {
-      const toDayId = overId.slice("day:".length);
-      if (toDayId === activeLoc.dayId) return;
-      // Drop at end of destination day.
-      const toDay = days.find((d) => d.id === toDayId);
-      const toIndex = toDay === undefined ? 0 : toDay.activities.length;
-      onActivityMove(activeLoc.dayId, toDayId, activeId, toIndex);
+      toDayId = overId.slice("day:".length);
+      const toDay = displayDays.find((d) => d.id === toDayId);
+      toIndex = toDay === undefined ? 0 : toDay.activities.length;
+    } else {
+      const overLoc = displayLocs.get(overId);
+      if (overLoc === undefined) return;
+      toDayId = overLoc.dayId;
+      toIndex = overLoc.index;
+    }
+
+    // Hovering back over origin day → let SortableContext's native
+    // reorder animation handle it, drop the pending cross-day projection.
+    if (toDayId === originLoc.dayId) {
+      if (pendingMove !== null) setPendingMove(null);
       return;
     }
 
-    const overLoc = locs.get(overId);
-    if (overLoc === undefined) return;
+    setPendingMove((prev) => {
+      if (
+        prev !== null &&
+        prev.activityId === activeId &&
+        prev.toDayId === toDayId &&
+        prev.toIndex === toIndex
+      ) {
+        return prev;
+      }
+      return {
+        activityId: activeId,
+        fromDayId: originLoc.dayId,
+        toDayId,
+        toIndex,
+      };
+    });
+  };
 
-    if (overLoc.dayId === activeLoc.dayId) {
-      onActivityReorder(activeLoc.dayId, activeId, overId);
-    } else {
-      onActivityMove(activeLoc.dayId, overLoc.dayId, activeId, overLoc.index);
+  const handleDragEnd = (event: DragEndEvent): void => {
+    const { active, over } = event;
+    const activeId = String(active.id);
+
+    const committed = pendingMove;
+    setActiveActivityId(null);
+    setPendingMove(null);
+
+    // Cross-day: the projected position is the drop.
+    if (committed !== null) {
+      onActivityMove(
+        committed.fromDayId,
+        committed.toDayId,
+        activeId,
+        committed.toIndex
+      );
+      return;
     }
+
+    // Otherwise fall back to same-day reorder based on origin view.
+    if (over === null) return;
+    const overId = String(over.id);
+    if (activeId === overId) return;
+    if (overId.startsWith("day:")) return;
+
+    const originLocs = buildLocationMap(days);
+    const activeLoc = originLocs.get(activeId);
+    const overLoc = originLocs.get(overId);
+    if (activeLoc === undefined || overLoc === undefined) return;
+    if (activeLoc.dayId !== overLoc.dayId) return;
+
+    onActivityReorder(activeLoc.dayId, activeId, overId);
+  };
+
+  const handleDragCancel = (): void => {
+    setActiveActivityId(null);
+    setPendingMove(null);
   };
 
   return (
@@ -146,8 +247,9 @@ export function ItineraryTableEditor({
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
       >
-        {days.map((day) => (
+        {displayDays.map((day) => (
           <DayGroup
             key={day.id}
             day={day}
@@ -348,7 +450,7 @@ function ActivityTableRow({
   const isAuto = activity.source === "auto";
 
   const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
+    transform: CSS.Translate.toString(transform),
     transition,
     opacity: isDragging ? 0.35 : 1,
     display: "flex",

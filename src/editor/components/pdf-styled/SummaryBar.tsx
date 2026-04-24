@@ -1,14 +1,14 @@
 import React from "react";
-import type { ListoDocument, ListoSection, TripMeta } from "../../../types/listo";
+import type { ListoDocument, TripMeta } from "../../../types/listo";
 import { InlineInput } from "../InlineEdit";
 
 /**
  * Horizontal summary bar under the cover — mirrors the PDF's `summaryBar`.
  *
- * The Duration / Flights / Hotels / Places cells are *derived* (auto-
- * computed from the document), so they render as static text. Destination
- * and the start/end dates are editable here — this is the only place the
- * user edits `TripMeta` after the refactor, replacing the old TripHeader.
+ * The Duration cell is *derived* (auto-computed from the dates), so it
+ * renders as static text. Destination and the start/end dates are editable
+ * here — this is the only place the user edits `TripMeta` after the
+ * refactor, replacing the old TripHeader.
  */
 
 interface SummaryBarProps {
@@ -24,17 +24,8 @@ function tripDurationNights(startDate: string, endDate: string): number {
   return Math.round((b - a) / (1000 * 60 * 60 * 24));
 }
 
-function countBlocks(doc: ListoDocument, kind: ListoSection["kind"]): number {
-  return doc.sections
-    .filter((s) => s.kind === kind)
-    .reduce((acc, s) => acc + s.blocks.length, 0);
-}
-
 export function SummaryBar({ doc, onMetaChange }: SummaryBarProps): React.ReactElement {
   const nights = tripDurationNights(doc.meta.startDate, doc.meta.endDate);
-  const flights = countBlocks(doc, "flights");
-  const hotels = countBlocks(doc, "hotels");
-  const places = countBlocks(doc, "places");
 
   return (
     <div
@@ -84,15 +75,6 @@ export function SummaryBar({ doc, onMetaChange }: SummaryBarProps): React.ReactE
       </SummaryCell>
       <SummaryCell label="Duration" readOnly>
         {nights} night{nights === 1 ? "" : "s"}
-      </SummaryCell>
-      <SummaryCell label="Flights" readOnly>
-        {flights}
-      </SummaryCell>
-      <SummaryCell label="Hotels" readOnly>
-        {hotels}
-      </SummaryCell>
-      <SummaryCell label="Places" readOnly>
-        {places}
       </SummaryCell>
     </div>
   );

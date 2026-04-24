@@ -398,7 +398,6 @@ function FlightCardView({ flight }: { flight: ListoFlightBlock }): React.ReactEl
 
       <View style={styles.flightMiddle}>
         <Text style={styles.flightNumber}>{flight.flightNumber}</Text>
-        <Text style={styles.flightArrow}>──→</Text>
         <Text style={styles.flightAirline}>{flight.airline}</Text>
       </View>
 
@@ -489,7 +488,7 @@ function PlacesTableView({ places }: { places: ListoPlaceBlock[] }): React.React
           <Text style={styles.placeName}>{place.name || "Unnamed place"}</Text>
           <Text style={styles.placeAddress}>{place.address}</Text>
           <Text style={styles.placeRating}>
-            {place.rating > 0 ? `★ ${place.rating.toFixed(1)}` : "—"}
+            {place.rating > 0 ? place.rating.toFixed(1) : "—"}
           </Text>
         </View>
       ))}
@@ -638,12 +637,6 @@ function tripDurationNights(startDate: string, endDate: string): number {
   return Math.round((b - a) / (1000 * 60 * 60 * 24));
 }
 
-function countBlocks(doc: ListoDocument, kind: ListoSection["kind"]): number {
-  return doc.sections
-    .filter((s) => s.kind === kind)
-    .reduce((acc, s) => acc + s.blocks.length, 0);
-}
-
 // ─── Main Document ────────────────────────────────────────────────────────────
 
 interface TripPDFDocumentProps {
@@ -689,18 +682,6 @@ export function TripPDFDocument({ doc, generatedAt }: TripPDFDocumentProps): Rea
           <View style={styles.summaryItem}>
             <Text style={styles.summaryLabel}>Destination</Text>
             <Text style={styles.summaryValue}>{destination}</Text>
-          </View>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryLabel}>Flights</Text>
-            <Text style={styles.summaryValue}>{countBlocks(doc, "flights")}</Text>
-          </View>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryLabel}>Hotels</Text>
-            <Text style={styles.summaryValue}>{countBlocks(doc, "hotels")}</Text>
-          </View>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryLabel}>Places</Text>
-            <Text style={styles.summaryValue}>{countBlocks(doc, "places")}</Text>
           </View>
         </View>
 

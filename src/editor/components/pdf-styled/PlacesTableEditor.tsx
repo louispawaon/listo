@@ -96,7 +96,7 @@ function SortablePlaceRow({
   });
 
   const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
+    transform: CSS.Translate.toString(transform),
     transition,
     opacity: isDragging ? 0.6 : 1,
     display: "flex",
@@ -183,12 +183,8 @@ function SortablePlaceRow({
           color: "var(--c-light-gray)",
           paddingTop: "1pt",
           flexShrink: 0,
-          display: "flex",
-          alignItems: "center",
-          gap: "3pt",
         }}
       >
-        <span>★</span>
         <InlineInput
           value={place.rating > 0 ? place.rating.toFixed(1) : ""}
           onChange={(value) => {

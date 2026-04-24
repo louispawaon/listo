@@ -71,7 +71,6 @@ export function FlightCardEditor({
               fontSize: "9pt",
               fontWeight: 700,
               color: "var(--c-dark-gray)",
-              marginBottom: "3pt",
               textAlign: "center",
               width: "100%",
             }}
@@ -88,20 +87,10 @@ export function FlightCardEditor({
           </div>
           <div
             style={{
-              fontSize: "16pt",
-              color: "var(--c-rule)",
-              marginTop: "2pt",
-              marginBottom: "2pt",
-              lineHeight: 1,
-            }}
-          >
-            ──→
-          </div>
-          <div
-            style={{
               fontSize: "7.5pt",
               color: "var(--c-light-gray)",
               textAlign: "center",
+              marginTop: "6pt",
               width: "100%",
             }}
           >
