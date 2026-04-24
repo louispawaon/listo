@@ -2,8 +2,8 @@
  * PDF document template for immigration use.
  * Designed to be clean, formal, and easy to scan at a border.
  *
- * Rendering order follows the document: sections are emitted in their current
- * drag-sorted order, then the daily itinerary table is appended.
+ * Rendering order follows the document: sections and the daily itinerary
+ * share one drag order (`itineraryIndex`); see `src/lib/paperLayout.ts`.
  */
 
 import React from "react";
@@ -13,17 +13,22 @@ import {
   Text,
   View,
   StyleSheet,
+  Svg,
+  Path,
+  Rect,
 } from "@react-pdf/renderer";
 import type {
   Activity,
   ListoDocument,
   ListoFlightBlock,
+  ListoFlightEndpoint,
   ListoHotelBlock,
   ListoNoteBlock,
   ListoPlaceBlock,
   ListoSection,
   TripDay,
 } from "../types/listo";
+import { resolvedItineraryIndex, sectionsInPaperOrder } from "../lib/paperLayout";
 import { formatDate, formatDateRange, formatTime, nightsBetween } from "../lib/formatters";
 // Side-effect import: registers Noto Sans (base) + hyphenation policy at module load.
 import { FONT_FAMILY, getFontFamilyChain } from "./fonts";
@@ -115,73 +120,196 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
 
-  // ── Flight card ──
+  // ── Flight card (boarding pass — mirrors `FlightCardEditor`) ──
   flightCard: {
-    flexDirection: "row",
-    alignItems: "center",
     marginBottom: SPACE.cardMarginBottom,
     backgroundColor: COLOR.surface,
-    padding: SPACE.cardPadding,
-    borderRadius: SPACE.radius,
-    borderLeftWidth: SPACE.cardBorderLeftWidth,
-    borderLeftColor: COLOR.accent,
+    borderRadius: SPACE.flightCardRadius,
+    overflow: "hidden",
   },
-  flightLeg: { flex: 2 },
-  flightLegRight: { flex: 2, alignItems: "flex-end" },
+  flightCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: COLOR.accent,
+    paddingVertical: SPACE.flightHeaderPaddingY,
+    paddingHorizontal: SPACE.flightHeaderPaddingX,
+  },
+  flightCardHeaderLeft: {
+    fontSize: TYPE.flightHeaderEyebrow,
+    fontWeight: WEIGHT.bold,
+    letterSpacing: TRACKING.flightBoardingTitle,
+    textTransform: "uppercase",
+    color: COLOR.white,
+  },
+  flightCardHeaderRight: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  flightCardHeaderRightText: {
+    fontSize: TYPE.flightHeaderEyebrow,
+    fontWeight: WEIGHT.bold,
+    letterSpacing: TRACKING.flightBoardingRight,
+    textTransform: "uppercase",
+    color: "rgba(255, 255, 255, 0.65)",
+    marginLeft: 4,
+  },
+  flightCardBody: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingTop: SPACE.flightBodyPaddingTop,
+    paddingBottom: SPACE.flightBodyPaddingBottom,
+    paddingHorizontal: SPACE.flightBodyPaddingX,
+  },
+  flightLegColumn: { flex: 2, minWidth: 0 },
+  flightLegColumnRight: { alignItems: "flex-end" },
+  flightLegLabel: {
+    fontSize: TYPE.flightLegLabel,
+    fontWeight: WEIGHT.bold,
+    letterSpacing: TRACKING.flightLegLabel,
+    textTransform: "uppercase",
+    color: COLOR.lightGray,
+    marginBottom: SPACE.flightLegLabelMarginBottom,
+  },
   flightIata: {
     fontSize: TYPE.flightIata,
     fontWeight: WEIGHT.bold,
     letterSpacing: 0.5,
+    lineHeight: 1,
+    textTransform: "uppercase",
     color: COLOR.black,
   },
+  flightIataRight: { textAlign: "right" },
   flightCity: {
     fontSize: TYPE.flightCity,
     color: COLOR.midGray,
     marginTop: SPACE.flightCityMarginTop,
   },
+  flightCityRight: { textAlign: "right" },
   flightTime: {
     fontSize: TYPE.flightTime,
     fontWeight: WEIGHT.bold,
     marginTop: SPACE.flightTimeMarginTop,
     color: COLOR.darkGray,
   },
+  flightTimeRight: { textAlign: "right" },
   flightDate: {
     fontSize: TYPE.flightDate,
     color: COLOR.lightGray,
     marginTop: SPACE.flightDateMarginTop,
   },
-  flightMiddle: { flex: 1, alignItems: "center" },
+  flightDateRight: { textAlign: "right" },
+  flightMiddle: {
+    width: SPACE.flightMiddleMinWidth,
+    paddingTop: SPACE.flightMiddlePaddingTop,
+    paddingHorizontal: SPACE.flightMiddlePaddingX,
+    alignItems: "center",
+  },
   flightNumber: {
     fontSize: TYPE.flightNumber,
     fontWeight: WEIGHT.bold,
+    letterSpacing: TRACKING.flightNumber,
     color: COLOR.darkGray,
-    marginBottom: SPACE.flightNumberMarginBottom,
+    textAlign: "center",
+  },
+  flightDashedRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    width: "100%",
+    marginTop: SPACE.flightDashedRowMarginTop,
+    marginBottom: SPACE.flightDashedRowMarginBottom,
+  },
+  flightDashSegment: {
+    flexGrow: 1,
+    borderTopWidth: 1,
+    borderTopColor: COLOR.rule,
+    borderStyle: "dashed",
   },
   flightAirline: {
     fontSize: TYPE.flightAirline,
     color: COLOR.lightGray,
+    letterSpacing: TRACKING.flightAirline,
+    textTransform: "uppercase",
     textAlign: "center",
   },
-  flightArrow: {
-    fontSize: TYPE.flightArrow,
-    color: COLOR.rule,
-    marginVertical: SPACE.flightArrowMarginVertical,
+  flightPerforationWrap: {
+    position: "relative",
+    borderTopWidth: 1,
+    borderTopColor: COLOR.rule,
+    borderStyle: "dashed",
+    marginTop: SPACE.flightPerforationMarginTop,
+  },
+  flightTearNotch: {
+    position: "absolute",
+    top: -5,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: COLOR.white,
+  },
+  flightStub: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingTop: SPACE.flightStubPaddingY,
+    paddingBottom: SPACE.flightStubPaddingBottom,
+    paddingHorizontal: SPACE.flightStubPaddingX,
+  },
+  flightStubLabel: {
+    fontSize: TYPE.flightStubLabel,
+    fontWeight: WEIGHT.bold,
+    letterSpacing: TRACKING.flightLegLabel,
+    textTransform: "uppercase",
+    color: COLOR.lightGray,
+    marginBottom: 1,
+    textAlign: "right",
+  },
+  flightStubValue: {
+    fontSize: TYPE.flightStubValue,
+    fontWeight: WEIGHT.bold,
+    color: COLOR.darkGray,
+    textAlign: "right",
   },
 
-  // ── Hotel card ──
+  // ── Hotel card (stay voucher — mirrors `HotelCardEditor`) ──
   hotelCard: {
     marginBottom: SPACE.cardMarginBottom,
-    padding: SPACE.cardPadding,
     backgroundColor: COLOR.surface,
-    borderRadius: SPACE.radius,
-    borderLeftWidth: SPACE.cardBorderLeftWidth,
-    borderLeftColor: COLOR.accent,
+    borderRadius: SPACE.hotelCardRadius,
+    overflow: "hidden",
+  },
+  hotelHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: COLOR.accent,
+    paddingVertical: SPACE.hotelHeaderPaddingY,
+    paddingHorizontal: SPACE.hotelHeaderPaddingX,
+  },
+  hotelHeaderLeft: {
+    fontSize: TYPE.hotelHeaderEyebrow,
+    fontWeight: WEIGHT.bold,
+    letterSpacing: TRACKING.hotelHeaderTitle,
+    textTransform: "uppercase",
+    color: COLOR.white,
+  },
+  hotelHeaderRight: {
+    fontSize: TYPE.hotelNightsPill,
+    fontWeight: WEIGHT.bold,
+    letterSpacing: TRACKING.hotelNightsPill,
+    color: "rgba(255, 255, 255, 0.72)",
+  },
+  hotelBody: {
+    paddingTop: SPACE.hotelBodyPaddingTop,
+    paddingBottom: 0,
+    paddingHorizontal: SPACE.hotelBodyPaddingX,
   },
   hotelName: {
     fontSize: TYPE.hotelName,
     fontWeight: WEIGHT.bold,
     marginBottom: SPACE.hotelNameMarginBottom,
     color: COLOR.black,
+    lineHeight: LINE_HEIGHT.hotelName,
   },
   hotelAddress: {
     fontSize: TYPE.hotelAddress,
@@ -189,8 +317,73 @@ const styles = StyleSheet.create({
     marginBottom: SPACE.hotelAddressMarginBottom,
     lineHeight: LINE_HEIGHT.hotelAddress,
   },
-  hotelMetaRow: { flexDirection: "row" },
-  hotelMetaItem: { flex: 1 },
+  hotelDateRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    marginTop: SPACE.hotelDateRowMarginTop,
+    gap: SPACE.hotelDateRowGap,
+  },
+  hotelDateTile: {
+    flex: 1,
+    minWidth: 0,
+    backgroundColor: COLOR.white,
+    borderWidth: 1,
+    borderColor: COLOR.rule,
+    borderStyle: "solid",
+    borderRadius: SPACE.hotelDateTileRadius,
+    padding: SPACE.hotelDateTilePadding,
+  },
+  hotelDateTileLabel: {
+    fontSize: TYPE.hotelDateTileLabel,
+    fontWeight: WEIGHT.bold,
+    letterSpacing: TRACKING.hotelDateTileLabel,
+    textTransform: "uppercase",
+    color: COLOR.lightGray,
+    marginBottom: 3,
+  },
+  hotelDateTileValue: {
+    fontSize: TYPE.hotelStayDate,
+    fontWeight: WEIGHT.bold,
+    color: COLOR.black,
+  },
+  hotelDateMid: {
+    width: 12,
+    marginHorizontal: SPACE.hotelDateMidGutter,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  hotelDateRule: {
+    width: 1,
+    height: SPACE.hotelDateRuleHeight,
+    backgroundColor: COLOR.rule,
+  },
+  hotelConfirmationBlock: {
+    marginTop: SPACE.hotelConfirmationMarginTop,
+    backgroundColor: COLOR.surfaceDark,
+    borderRadius: SPACE.hotelDateTileRadius,
+    padding: SPACE.hotelConfirmationPadding,
+    borderWidth: 1,
+    borderColor: COLOR.ruleLight,
+    borderStyle: "solid",
+  },
+  hotelConfirmationValue: {
+    fontSize: TYPE.hotelConfirmation,
+    fontWeight: WEIGHT.bold,
+    color: COLOR.black,
+    letterSpacing: 0.3,
+  },
+  hotelContactShell: {
+    borderTopWidth: 1,
+    borderTopColor: COLOR.rule,
+    borderStyle: "dashed",
+    marginTop: SPACE.hotelDividerMarginTop,
+    marginLeft: SPACE.hotelBodyPaddingX,
+    marginRight: SPACE.hotelBodyPaddingX,
+    paddingTop: SPACE.hotelDividerPaddingTop,
+    paddingBottom: SPACE.hotelBodyPaddingBottom,
+  },
+  hotelContact: { flexDirection: "row", gap: SPACE.hotelContactGap },
+  hotelContactItem: { flex: 1 },
   metaLabel: {
     fontSize: TYPE.metaLabel,
     letterSpacing: TRACKING.metaLabel,
@@ -208,14 +401,6 @@ const styles = StyleSheet.create({
     color: COLOR.lightGray,
     fontStyle: STYLE.italic,
   },
-  hotelDivider: {
-    borderTopWidth: 1,
-    borderTopColor: COLOR.ruleLight,
-    marginTop: SPACE.hotelDividerMarginTop,
-    paddingTop: SPACE.hotelDividerPaddingTop,
-  },
-  hotelContact: { flexDirection: "row", gap: SPACE.hotelContactGap },
-  hotelContactItem: { flex: 1 },
 
   // ── Places table ──
   placesTable: {
@@ -382,34 +567,109 @@ const styles = StyleSheet.create({
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
+function formatDepartStubReadout(depart: ListoFlightEndpoint): string {
+  const has = depart.date !== "" || depart.time !== "";
+  if (!has) return "—";
+  const parts: string[] = [];
+  if (depart.date !== "") parts.push(formatDate(depart.date));
+  if (depart.time !== "") parts.push(formatTime(depart.time));
+  return parts.join(" · ");
+}
+
+const FLIGHT_BARCODE_WIDTHS = [
+  2, 1, 3, 1, 2, 1, 4, 1, 2, 3, 1, 2, 1, 3, 2, 1, 4, 1, 2, 3, 1, 2, 1, 3, 2, 1, 4, 1, 2, 3,
+] as const;
+
+const PLANE_PATH =
+  "M2 10L9 7l1-5 2 1-1 4.5 4-1.5 1 1-3.5 2 1 4-1.5.5L11 10l-4 2L7 14l-1.5.5L4 11 2 10z";
+
+function FlightBarcodePdf(): React.ReactElement {
+  const rects: React.ReactElement[] = [];
+  let x = 0;
+  FLIGHT_BARCODE_WIDTHS.forEach((w, i) => {
+    rects.push(<Rect key={i} x={x} y={0} width={w} height={22} fill={COLOR.black} />);
+    x += w + (i % 2 === 0 ? 2 : 1);
+  });
+  return (
+    <Svg width={100} height={22} viewBox={`0 0 ${x} 22`} style={{ opacity: 0.2 }}>
+      {rects}
+    </Svg>
+  );
+}
+
+function FlightLegPdfView({
+  endpoint,
+  label,
+  alignRight,
+}: {
+  endpoint: ListoFlightEndpoint;
+  label: string;
+  alignRight: boolean;
+}): React.ReactElement {
+  const ta = alignRight ? { textAlign: "right" as const } : {};
+  return (
+    <View style={alignRight ? [styles.flightLegColumn, styles.flightLegColumnRight] : styles.flightLegColumn}>
+      <Text style={[styles.flightLegLabel, ta]}>{label}</Text>
+      <View style={alignRight ? { width: "100%", alignItems: "flex-end" } : { width: "100%" }}>
+        <Text style={[styles.flightIata, ta]}>{endpoint.airportIata.trim() !== "" ? endpoint.airportIata : "—"}</Text>
+      </View>
+      <View style={alignRight ? { width: "100%", alignItems: "flex-end" } : { width: "100%" }}>
+        <Text style={[styles.flightCity, ta]}>{endpoint.airportName}</Text>
+      </View>
+      <View style={alignRight ? { width: "100%", alignItems: "flex-end" } : { width: "100%" }}>
+        <Text style={[styles.flightTime, ta]}>
+          {endpoint.time !== "" ? formatTime(endpoint.time) : "—"}
+        </Text>
+      </View>
+      <View style={alignRight ? { width: "100%", alignItems: "flex-end" } : { width: "100%" }}>
+        <Text style={[styles.flightDate, ta]}>
+          {endpoint.date !== "" ? formatDate(endpoint.date) : ""}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 function FlightCardView({ flight }: { flight: ListoFlightBlock }): React.ReactElement {
   return (
     <View style={styles.flightCard}>
-      <View style={styles.flightLeg}>
-        <Text style={styles.flightIata}>{flight.depart.airportIata || "—"}</Text>
-        <Text style={styles.flightCity}>{flight.depart.airportName}</Text>
-        <Text style={styles.flightTime}>
-          {flight.depart.time !== "" ? formatTime(flight.depart.time) : "—"}
-        </Text>
-        <Text style={styles.flightDate}>
-          {flight.depart.date !== "" ? formatDate(flight.depart.date) : ""}
-        </Text>
+      <View style={styles.flightCardHeader}>
+        <Text style={styles.flightCardHeaderLeft}>Boarding Pass</Text>
+        <View style={styles.flightCardHeaderRight}>
+          <Svg width={10} height={10} viewBox="0 0 20 20">
+            <Path d={PLANE_PATH} fill={COLOR.white} />
+          </Svg>
+          <Text style={styles.flightCardHeaderRightText}>Flight Segment</Text>
+        </View>
       </View>
 
-      <View style={styles.flightMiddle}>
-        <Text style={styles.flightNumber}>{flight.flightNumber}</Text>
-        <Text style={styles.flightAirline}>{flight.airline}</Text>
+      <View style={styles.flightCardBody}>
+        <FlightLegPdfView endpoint={flight.depart} label="From" alignRight={false} />
+        <View style={styles.flightMiddle}>
+          <Text style={styles.flightNumber}>{flight.flightNumber}</Text>
+          <View style={styles.flightDashedRow}>
+            <View style={styles.flightDashSegment} />
+            <Svg width={14} height={14} viewBox="0 0 20 20" style={{ marginHorizontal: 4 }}>
+              <Path d={PLANE_PATH} fill={COLOR.midGray} />
+            </Svg>
+            <View style={styles.flightDashSegment} />
+          </View>
+          <Text style={styles.flightAirline}>{flight.airline}</Text>
+        </View>
+        <FlightLegPdfView endpoint={flight.arrive} label="To" alignRight />
       </View>
 
-      <View style={styles.flightLegRight}>
-        <Text style={styles.flightIata}>{flight.arrive.airportIata || "—"}</Text>
-        <Text style={styles.flightCity}>{flight.arrive.airportName}</Text>
-        <Text style={styles.flightTime}>
-          {flight.arrive.time !== "" ? formatTime(flight.arrive.time) : "—"}
-        </Text>
-        <Text style={styles.flightDate}>
-          {flight.arrive.date !== "" ? formatDate(flight.arrive.date) : ""}
-        </Text>
+      <View style={styles.flightPerforationWrap}>
+        <View style={[styles.flightTearNotch, { left: -5 }]} />
+        <View style={[styles.flightTearNotch, { right: -5 }]} />
+      </View>
+
+      <View style={styles.flightStub}>
+        <FlightBarcodePdf />
+        <View>
+          <Text style={styles.flightStubLabel}>Departs</Text>
+          <Text style={styles.flightStubValue}>{formatDepartStubReadout(flight.depart)}</Text>
+        </View>
       </View>
     </View>
   );
@@ -421,33 +681,42 @@ function HotelCardView({ hotel }: { hotel: ListoHotelBlock }): React.ReactElemen
       ? nightsBetween(hotel.checkIn, hotel.checkOut)
       : 0;
   const hasContact = hotel.phone !== null || hotel.website !== null;
+  const nightsLabel =
+    nights > 0 ? `${nights} night${nights === 1 ? "" : "s"}` : "—";
 
   return (
     <View style={styles.hotelCard}>
-      <Text style={styles.hotelName}>{hotel.name || "Unnamed hotel"}</Text>
-      {hotel.address !== "" && <Text style={styles.hotelAddress}>{hotel.address}</Text>}
+      <View style={styles.hotelHeader} wrap={false}>
+        <Text style={styles.hotelHeaderLeft}>Accommodation</Text>
+        <Text style={styles.hotelHeaderRight}>{nightsLabel}</Text>
+      </View>
 
-      <View style={styles.hotelMetaRow}>
-        <View style={styles.hotelMetaItem}>
-          <Text style={styles.metaLabel}>Check-in</Text>
-          <Text style={styles.metaValue}>
-            {hotel.checkIn !== "" ? formatDate(hotel.checkIn) : "—"}
-          </Text>
+      <View style={styles.hotelBody} wrap={false}>
+        <Text style={styles.hotelName}>{hotel.name || "Unnamed hotel"}</Text>
+        {hotel.address !== "" && <Text style={styles.hotelAddress}>{hotel.address}</Text>}
+
+        <View style={styles.hotelDateRow}>
+          <View style={styles.hotelDateTile}>
+            <Text style={styles.hotelDateTileLabel}>Check-in</Text>
+            <Text style={styles.hotelDateTileValue}>
+              {hotel.checkIn !== "" ? formatDate(hotel.checkIn) : "—"}
+            </Text>
+          </View>
+          <View style={styles.hotelDateMid}>
+            <View style={styles.hotelDateRule} />
+          </View>
+          <View style={styles.hotelDateTile}>
+            <Text style={styles.hotelDateTileLabel}>Check-out</Text>
+            <Text style={styles.hotelDateTileValue}>
+              {hotel.checkOut !== "" ? formatDate(hotel.checkOut) : "—"}
+            </Text>
+          </View>
         </View>
-        <View style={styles.hotelMetaItem}>
-          <Text style={styles.metaLabel}>Check-out</Text>
-          <Text style={styles.metaValue}>
-            {hotel.checkOut !== "" ? formatDate(hotel.checkOut) : "—"}
-          </Text>
-        </View>
-        <View style={styles.hotelMetaItem}>
-          <Text style={styles.metaLabel}>Nights</Text>
-          <Text style={styles.metaValue}>{nights}</Text>
-        </View>
-        <View style={styles.hotelMetaItem}>
+
+        <View style={styles.hotelConfirmationBlock} wrap={false}>
           <Text style={styles.metaLabel}>Confirmation</Text>
           {hotel.confirmationNumber !== null ? (
-            <Text style={styles.metaValue}>{hotel.confirmationNumber}</Text>
+            <Text style={styles.hotelConfirmationValue}>{hotel.confirmationNumber}</Text>
           ) : (
             <Text style={styles.metaValueMuted}>Not provided</Text>
           )}
@@ -455,7 +724,7 @@ function HotelCardView({ hotel }: { hotel: ListoHotelBlock }): React.ReactElemen
       </View>
 
       {hasContact && (
-        <View style={styles.hotelDivider}>
+        <View style={styles.hotelContactShell}>
           <View style={styles.hotelContact}>
             {hotel.phone !== null && (
               <View style={styles.hotelContactItem}>
@@ -685,23 +954,54 @@ export function TripPDFDocument({ doc, generatedAt }: TripPDFDocumentProps): Rea
           </View>
         </View>
 
-        {/* ── Sections in document order ── */}
-        {doc.sections.map((section) => (
-          <View key={section.id} style={styles.section}>
-            <Text style={styles.sectionHeader}>{section.heading}</Text>
-            <SectionBody section={section} />
-          </View>
-        ))}
-
-        {/* ── Daily itinerary ── */}
-        <View style={styles.section} break>
-          <Text style={styles.sectionHeader}>Daily Itinerary</Text>
-          {doc.days.length === 0 ? (
-            <Text style={styles.emptySection}>No daily itinerary entries.</Text>
-          ) : (
-            <ItineraryTableView days={doc.days} />
-          )}
-        </View>
+        {/* ── Sections + daily itinerary in editor drag order ── */}
+        {(() => {
+          const itineraryIndex = resolvedItineraryIndex(doc);
+          const sections = sectionsInPaperOrder(doc);
+          const nodes: React.ReactElement[] = [];
+          for (let i = 0; i < sections.length; i++) {
+            if (i === itineraryIndex) {
+              nodes.push(
+                <View
+                  key="__listo-itinerary__"
+                  style={styles.section}
+                  break={itineraryIndex > 0}
+                >
+                  <Text style={styles.sectionHeader}>Daily Itinerary</Text>
+                  {doc.days.length === 0 ? (
+                    <Text style={styles.emptySection}>No daily itinerary entries.</Text>
+                  ) : (
+                    <ItineraryTableView days={doc.days} />
+                  )}
+                </View>
+              );
+            }
+            const section = sections[i]!;
+            nodes.push(
+              <View key={section.id} style={styles.section}>
+                <Text style={styles.sectionHeader}>{section.heading}</Text>
+                <SectionBody section={section} />
+              </View>
+            );
+          }
+          if (itineraryIndex === sections.length) {
+            nodes.push(
+              <View
+                key="__listo-itinerary__"
+                style={styles.section}
+                break={itineraryIndex > 0}
+              >
+                <Text style={styles.sectionHeader}>Daily Itinerary</Text>
+                {doc.days.length === 0 ? (
+                  <Text style={styles.emptySection}>No daily itinerary entries.</Text>
+                ) : (
+                  <ItineraryTableView days={doc.days} />
+                )}
+              </View>
+            );
+          }
+          return nodes;
+        })()}
 
         {/* ── Footer ── */}
         <View style={styles.footer} fixed>

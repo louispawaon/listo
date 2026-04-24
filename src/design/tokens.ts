@@ -67,17 +67,35 @@ export const TYPE = {
   summaryValue: 10,
   // Section header ("eyebrow" style)
   sectionHeader: 7.5,
-  // Flight card
-  flightIata: 20,
-  flightCity: 8.5,
-  flightTime: 10,
+  // Flight card (boarding-pass layout — shared by editor + PDF)
+  flightIata: 22,
+  flightCity: 8,
+  flightTime: 11,
   flightDate: 8,
   flightNumber: 9,
   flightAirline: 7.5,
-  flightArrow: 16,
-  // Hotel card
-  hotelName: 11,
+  /** Uppercase FROM / TO eyebrows */
+  flightLegLabel: 6.5,
+  /** Dark header band */
+  flightHeaderEyebrow: 7,
+  /** Stub “DEPARTS” label */
+  flightStubLabel: 6.5,
+  /** Stub departure readout */
+  flightStubValue: 8,
+  // Hotel card (stay voucher — shared by editor + PDF)
+  /** Hero property name */
+  hotelName: 12,
   hotelAddress: 8.5,
+  /** Dark header band, left */
+  hotelHeaderEyebrow: 7,
+  /** Nights readout, header right */
+  hotelNightsPill: 8.5,
+  /** Check-in / check-out in date tiles */
+  hotelStayDate: 10.5,
+  /** Uppercase tile labels (Check-in, etc.) */
+  hotelDateTileLabel: 6.5,
+  /** Confirmation number in inset row */
+  hotelConfirmation: 9,
   metaLabel: 7,
   metaValue: 9,
   // Places table
@@ -110,12 +128,21 @@ export const TRACKING = {
   sectionHeader: 1.8,
   metaLabel: 1,
   itineraryHeader: 1,
+  flightBoardingTitle: 1.8,
+  flightBoardingRight: 1.4,
+  flightLegLabel: 1.6,
+  flightAirline: 0.8,
+  flightNumber: 0.4,
+  hotelHeaderTitle: 1.4,
+  hotelNightsPill: 0.6,
+  hotelDateTileLabel: 1.2,
 } as const;
 
 // ─── Line heights (unit-less multipliers) ────────────────────────────────────
 
 export const LINE_HEIGHT = {
   coverTitle: 1.2,
+  hotelName: 1.2,
   hotelAddress: 1.4,
   placeName: 1.4,
   placeAddress: 1.4,
@@ -156,18 +183,48 @@ export const SPACE = {
   cardBorderLeftWidth: 3,
   // Meta row
   metaLabelMarginBottom: 2,
-  // Hotel
-  hotelNameMarginBottom: 3,
-  hotelAddressMarginBottom: 10,
-  hotelDividerMarginTop: 10,
-  hotelDividerPaddingTop: 8,
+  // Hotel (stay voucher)
+  hotelCardRadius: 8,
+  hotelHeaderPaddingY: 5,
+  hotelHeaderPaddingX: 12,
+  hotelBodyPaddingTop: 10,
+  hotelBodyPaddingBottom: 4,
+  hotelBodyPaddingX: 12,
+  hotelNameMarginBottom: 2,
+  hotelAddressMarginBottom: 8,
+  hotelDateRowMarginTop: 8,
+  hotelDateRowGap: 5,
+  hotelDateTilePadding: 8,
+  /** Between check-in and check-out tiles */
+  hotelDateMidGutter: 2,
+  hotelDateRuleHeight: 24,
+  hotelConfirmationMarginTop: 8,
+  hotelConfirmationPadding: 8,
+  /** Tile corner radius in pt (react-pdf / CSS) */
+  hotelDateTileRadius: 3,
+  hotelDividerMarginTop: 6,
+  hotelDividerPaddingTop: 6,
   hotelContactGap: 16,
-  // Flight
-  flightTimeMarginTop: 5,
+  // Flight (boarding-pass)
+  flightCardRadius: 8,
+  flightBodyPaddingTop: 12,
+  flightBodyPaddingBottom: 10,
+  flightBodyPaddingX: 14,
+  flightHeaderPaddingY: 5,
+  flightHeaderPaddingX: 12,
+  flightPerforationMarginTop: 2,
+  flightStubPaddingY: 8,
+  flightStubPaddingBottom: 9,
+  flightStubPaddingX: 12,
+  flightMiddleMinWidth: 92,
+  flightMiddlePaddingTop: 10,
+  flightMiddlePaddingX: 10,
+  flightLegLabelMarginBottom: 3,
+  flightTimeMarginTop: 7,
   flightDateMarginTop: 1,
-  flightCityMarginTop: 1,
-  flightNumberMarginBottom: 3,
-  flightArrowMarginVertical: 2,
+  flightCityMarginTop: 3,
+  flightDashedRowMarginTop: 4,
+  flightDashedRowMarginBottom: 3,
   // Places
   placeRowPaddingY: 7,
   placeIndexWidth: 20,

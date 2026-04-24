@@ -8,6 +8,7 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import {
+  arrayMove,
   SortableContext,
   useSortable,
   verticalListSortingStrategy,
@@ -35,6 +36,10 @@ import { useEditorState, createManualActivity } from "./hooks/useEditorState";
 import { useAutoSave } from "./hooks/useAutoSave";
 import { loadListoFile, saveListoFile } from "./hooks/useListoFile";
 import { clearAutosave } from "./storage";
+import {
+  buildPaperSortIds,
+  LISTO_ITINERARY_SORTABLE_ID,
+} from "../lib/paperLayout";
 
 interface EditorAppProps {
   initialDoc: ListoDocument;
@@ -168,14 +173,16 @@ export function EditorApp({ initialDoc }: EditorAppProps): React.ReactElement {
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
   );
 
-  const handleSectionDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      const { active, over } = event;
-      if (over === null || active.id === over.id) return;
-      actions.reorderSections(String(active.id), String(over.id));
-    },
-    [actions]
-  );
+  const paperSortIds = useMemo(() => buildPaperSortIds(doc), [doc]);
+
+  const handleSectionDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over === null || active.id === over.id) return;
+    const oldIndex = paperSortIds.indexOf(String(active.id));
+    const newIndex = paperSortIds.indexOf(String(over.id));
+    if (oldIndex === -1 || newIndex === -1) return;
+    actions.reorderPaperLayout(arrayMove(paperSortIds, oldIndex, newIndex));
+  }, [actions, paperSortIds]);
 
   const handleSave = useCallback((): void => {
     saveListoFile(doc);
@@ -263,96 +270,85 @@ export function EditorApp({ initialDoc }: EditorAppProps): React.ReactElement {
             onDragEnd={handleSectionDragEnd}
           >
             <SortableContext
-              items={doc.sections.map((s) => s.id)}
+              items={paperSortIds}
               strategy={verticalListSortingStrategy}
             >
-              {doc.sections.map((section) => (
-                <SortableSection key={section.id} id={section.id}>
-                  {(dragHandleProps) => (
-                    <SectionBlock
-                      heading={section.heading}
-                      onHeadingChange={(heading) => {
-                        actions.setSectionHeading(section.id, heading);
-                      }}
-                      isEmpty={section.blocks.length === 0}
-                      emptyHint={emptyHintFor(section.kind)}
-                      dragHandleProps={dragHandleProps}
-                      actions={
-                        <AddButton
-                          onClick={() => {
-                            actions.addBlock(section.id, newBlockFor(section));
-                          }}
+              {paperSortIds.map((sortId) => {
+                if (sortId === LISTO_ITINERARY_SORTABLE_ID) {
+                  return (
+                    <SortableSection key={sortId} id={sortId}>
+                      {(dragHandleProps) => (
+                        <SectionBlock
+                          heading="Daily Itinerary"
+                          onHeadingChange={() => {}}
+                          headingReadOnly
+                          isEmpty={doc.days.length === 0}
+                          emptyHint="No daily itinerary entries. Set trip dates above to generate days."
+                          dragHandleProps={dragHandleProps}
                         >
-                          {addButtonLabelFor(section.kind)}
-                        </AddButton>
-                      }
-                    >
-                      <SectionContent
-                        section={section}
-                        onBlockChange={(blockId, patch) => {
-                          actions.updateBlock(section.id, blockId, patch);
+                          <ItineraryTableEditor
+                            days={doc.days}
+                            onActivityChange={(dayId, activityId, patch) => {
+                              actions.updateActivity(dayId, activityId, patch);
+                            }}
+                            onActivityRemove={(dayId, activityId) => {
+                              actions.removeActivity(dayId, activityId);
+                            }}
+                            onActivityReorder={(dayId, fromId, toId) => {
+                              actions.reorderActivities(dayId, fromId, toId);
+                            }}
+                            onActivityMove={(fromDayId, toDayId, activityId, toIndex) => {
+                              actions.moveActivity(fromDayId, toDayId, activityId, toIndex);
+                            }}
+                            onActivityAdd={handleActivityAdd}
+                          />
+                        </SectionBlock>
+                      )}
+                    </SortableSection>
+                  );
+                }
+                const section = doc.sections.find((s) => s.id === sortId);
+                if (section === undefined) return null;
+                return (
+                  <SortableSection key={section.id} id={section.id}>
+                    {(dragHandleProps) => (
+                      <SectionBlock
+                        heading={section.heading}
+                        onHeadingChange={(heading) => {
+                          actions.setSectionHeading(section.id, heading);
                         }}
-                        onBlockRemove={(blockId) => {
-                          actions.removeBlock(section.id, blockId);
-                        }}
-                        onBlockReorder={(fromId, toId) => {
-                          actions.reorderBlocks(section.id, fromId, toId);
-                        }}
-                      />
-                    </SectionBlock>
-                  )}
-                </SortableSection>
-              ))}
+                        isEmpty={section.blocks.length === 0}
+                        emptyHint={emptyHintFor(section.kind)}
+                        dragHandleProps={dragHandleProps}
+                        actions={
+                          <AddButton
+                            onClick={() => {
+                              actions.addBlock(section.id, newBlockFor(section));
+                            }}
+                          >
+                            {addButtonLabelFor(section.kind)}
+                          </AddButton>
+                        }
+                      >
+                        <SectionContent
+                          section={section}
+                          onBlockChange={(blockId, patch) => {
+                            actions.updateBlock(section.id, blockId, patch);
+                          }}
+                          onBlockRemove={(blockId) => {
+                            actions.removeBlock(section.id, blockId);
+                          }}
+                          onBlockReorder={(fromId, toId) => {
+                            actions.reorderBlocks(section.id, fromId, toId);
+                          }}
+                        />
+                      </SectionBlock>
+                    )}
+                  </SortableSection>
+                );
+              })}
             </SortableContext>
           </DndContext>
-
-          {/* ── Daily itinerary ── */}
-          <section style={{ marginBottom: "26pt" }}>
-            <div
-              style={{
-                fontSize: "7.5pt",
-                letterSpacing: "1.8pt",
-                textTransform: "uppercase",
-                color: "var(--c-mid-gray)",
-                borderBottom: "1pt solid var(--c-rule)",
-                paddingBottom: "5pt",
-                marginBottom: "12pt",
-              }}
-            >
-              Daily Itinerary
-            </div>
-
-            {doc.days.length === 0 ? (
-              <div
-                style={{
-                  fontSize: "9pt",
-                  color: "var(--c-light-gray)",
-                  fontStyle: "italic",
-                  paddingTop: "6pt",
-                  paddingBottom: "6pt",
-                }}
-              >
-                No daily itinerary entries. Set trip dates above to generate days.
-              </div>
-            ) : (
-              <ItineraryTableEditor
-                days={doc.days}
-                onActivityChange={(dayId, activityId, patch) => {
-                  actions.updateActivity(dayId, activityId, patch);
-                }}
-                onActivityRemove={(dayId, activityId) => {
-                  actions.removeActivity(dayId, activityId);
-                }}
-                onActivityReorder={(dayId, fromId, toId) => {
-                  actions.reorderActivities(dayId, fromId, toId);
-                }}
-                onActivityMove={(fromDayId, toDayId, activityId, toIndex) => {
-                  actions.moveActivity(fromDayId, toDayId, activityId, toIndex);
-                }}
-                onActivityAdd={handleActivityAdd}
-              />
-            )}
-          </section>
         </PaperCanvas>
       </div>
     </div>

@@ -22,6 +22,7 @@ import type {
   TripDay,
   TripMeta,
 } from "../../types/listo";
+import { LISTO_ITINERARY_SORTABLE_ID } from "../../lib/paperLayout";
 
 // ─── UUID ────────────────────────────────────────────────────────────────────
 
@@ -63,7 +64,7 @@ function indexOfId<T extends { id: string }>(items: readonly T[], id: string): n
 type Action =
   | { kind: "setMeta"; patch: Partial<TripMeta> }
   | { kind: "setSectionHeading"; sectionId: string; heading: string }
-  | { kind: "reorderSections"; fromId: string; toId: string }
+  | { kind: "reorderPaperLayout"; orderedIds: string[] }
   | { kind: "addBlock"; sectionId: string; block: ListoBlock }
   | { kind: "updateBlock"; sectionId: string; blockId: string; patch: Partial<ListoBlock> }
   | { kind: "removeBlock"; sectionId: string; blockId: string }
@@ -135,12 +136,30 @@ function reducer(state: ListoDocument, action: Action): ListoDocument {
         })),
       };
 
-    case "reorderSections": {
-      const fromIndex = indexOfId(state.sections, action.fromId);
-      const toIndex = indexOfId(state.sections, action.toId);
-      if (fromIndex === -1 || toIndex === -1) return state;
-      const next = reorderArray(state.sections, fromIndex, toIndex);
-      return { ...state, sections: withOrder(next) };
+    case "reorderPaperLayout": {
+      const orderedIds = action.orderedIds;
+      const itinIdx = orderedIds.indexOf(LISTO_ITINERARY_SORTABLE_ID);
+      if (itinIdx === -1) return state;
+
+      const sectionIds = orderedIds.filter((id) => id !== LISTO_ITINERARY_SORTABLE_ID);
+      if (sectionIds.length !== state.sections.length) return state;
+
+      const expected = new Set(state.sections.map((s) => s.id));
+      for (const id of sectionIds) {
+        if (!expected.delete(id)) return state;
+      }
+      if (expected.size !== 0) return state;
+
+      const nextSections = sectionIds
+        .map((id) => state.sections.find((s) => s.id === id))
+        .filter((s): s is ListoSection => s !== undefined);
+      if (nextSections.length !== state.sections.length) return state;
+
+      return {
+        ...state,
+        sections: withOrder(nextSections),
+        itineraryIndex: itinIdx,
+      };
     }
 
     case "addBlock":
@@ -309,7 +328,7 @@ export function createManualActivity(input: {
 export interface EditorActions {
   setMeta: (patch: Partial<TripMeta>) => void;
   setSectionHeading: (sectionId: string, heading: string) => void;
-  reorderSections: (fromId: string, toId: string) => void;
+  reorderPaperLayout: (orderedIds: string[]) => void;
   addBlock: (sectionId: string, block: ListoBlock) => void;
   updateBlock: (sectionId: string, blockId: string, patch: Partial<ListoBlock>) => void;
   removeBlock: (sectionId: string, blockId: string) => void;
@@ -345,8 +364,8 @@ export function useEditorState(initial: ListoDocument): {
     (sectionId: string, heading: string) => { dispatch({ kind: "setSectionHeading", sectionId, heading }); },
     []
   );
-  const reorderSections = useCallback(
-    (fromId: string, toId: string) => { dispatch({ kind: "reorderSections", fromId, toId }); },
+  const reorderPaperLayout = useCallback(
+    (orderedIds: string[]) => { dispatch({ kind: "reorderPaperLayout", orderedIds }); },
     []
   );
   const addBlock = useCallback(
@@ -404,7 +423,7 @@ export function useEditorState(initial: ListoDocument): {
     () => ({
       setMeta,
       setSectionHeading,
-      reorderSections,
+      reorderPaperLayout,
       addBlock,
       updateBlock,
       removeBlock,
@@ -419,7 +438,7 @@ export function useEditorState(initial: ListoDocument): {
     [
       setMeta,
       setSectionHeading,
-      reorderSections,
+      reorderPaperLayout,
       addBlock,
       updateBlock,
       removeBlock,

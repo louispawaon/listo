@@ -254,12 +254,14 @@ function buildDays(tripData: TripData): TripDay[] {
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 export function initEditorState(tripData: TripData): ListoDocument {
+  const sections = buildSections(tripData);
   return {
     version: 1,
     savedAt: new Date().toISOString(),
     source: "wanderlog",
     meta: buildMeta(tripData),
-    sections: buildSections(tripData),
+    sections,
+    itineraryIndex: sections.length,
     days: buildDays(tripData),
   };
 }

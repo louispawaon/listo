@@ -23,6 +23,12 @@ export interface ListoDocument {
   source: ListoSource;
   meta: TripMeta;
   sections: ListoSection[];
+  /**
+   * How many sections (in `order`) appear before the daily itinerary block.
+   * Range `0..sections.length`. Omitted or out of range is treated as
+   * `sections.length` (itinerary last), matching legacy documents.
+   */
+  itineraryIndex?: number;
   days: TripDay[];
 }
 

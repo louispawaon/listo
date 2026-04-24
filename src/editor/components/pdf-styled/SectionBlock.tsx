@@ -13,6 +13,8 @@ import { InlineInput } from "../InlineEdit";
 interface SectionBlockProps {
   heading: string;
   onHeadingChange: (next: string) => void;
+  /** When true, the heading is static text (e.g. fixed “Daily Itinerary”). */
+  headingReadOnly?: boolean;
   isEmpty: boolean;
   emptyHint: string;
   actions?: React.ReactNode;
@@ -24,6 +26,7 @@ interface SectionBlockProps {
 export function SectionBlock({
   heading,
   onHeadingChange,
+  headingReadOnly = false,
   isEmpty,
   emptyHint,
   actions,
@@ -71,12 +74,16 @@ export function SectionBlock({
             flex: 1,
           }}
         >
-          <InlineInput
-            value={heading}
-            onChange={onHeadingChange}
-            ariaLabel="Section heading"
-            placeholder="Section heading"
-          />
+          {headingReadOnly ? (
+            heading
+          ) : (
+            <InlineInput
+              value={heading}
+              onChange={onHeadingChange}
+              ariaLabel="Section heading"
+              placeholder="Section heading"
+            />
+          )}
         </div>
         {actions !== undefined && <div className="shrink-0">{actions}</div>}
       </div>
