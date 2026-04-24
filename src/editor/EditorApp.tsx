@@ -22,12 +22,16 @@ import type {
   ListoNoteBlock,
   ListoPlaceBlock,
   ListoSection,
+  TripMeta,
 } from "../types/listo";
-import { Toolbar } from "./components/Toolbar";
-import { TripHeader } from "./components/TripHeader";
-import { SectionPanel } from "./components/SectionPanel";
-import { DayPanel } from "./components/DayPanel";
-import { useEditorState } from "./hooks/useEditorState";
+import { Toolbar, type ZoomLevel } from "./components/Toolbar";
+import { PaperCanvas } from "./components/PaperCanvas";
+import { CoverHeader } from "./components/pdf-styled/CoverHeader";
+import { SummaryBar } from "./components/pdf-styled/SummaryBar";
+import { SectionBlock, AddButton } from "./components/pdf-styled/SectionBlock";
+import { SectionContent } from "./components/pdf-styled/SectionContent";
+import { ItineraryTableEditor } from "./components/pdf-styled/ItineraryTableEditor";
+import { useEditorState, createManualActivity } from "./hooks/useEditorState";
 import { useAutoSave } from "./hooks/useAutoSave";
 import { loadListoFile, saveListoFile } from "./hooks/useListoFile";
 import { clearAutosave } from "./storage";
@@ -95,18 +99,44 @@ function newBlockFor(section: ListoSection): ListoBlock {
   }
 }
 
+function addButtonLabelFor(kind: ListoSection["kind"]): string {
+  switch (kind) {
+    case "flights":
+      return "+ Flight";
+    case "hotels":
+      return "+ Hotel";
+    case "places":
+      return "+ Place";
+    case "notes":
+      return "+ Note";
+  }
+}
+
+function emptyHintFor(kind: ListoSection["kind"]): string {
+  switch (kind) {
+    case "flights":
+      return "No flights recorded. Click + Flight to add one.";
+    case "hotels":
+      return "No hotels recorded. Click + Hotel to add one.";
+    case "places":
+      return "No places recorded. Click + Place to add one.";
+    case "notes":
+      return "No notes recorded. Click + Note to add one.";
+  }
+}
+
 // ─── Sortable wrapper for section-level DnD ──────────────────────────────────
 
 interface SortableSectionProps {
-  section: ListoSection;
+  id: string;
   children: (
     dragHandleProps: React.HTMLAttributes<HTMLButtonElement>
   ) => React.ReactNode;
 }
 
-function SortableSection({ section, children }: SortableSectionProps): React.ReactElement {
+function SortableSection({ id, children }: SortableSectionProps): React.ReactElement {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: section.id,
+    id,
   });
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -132,6 +162,7 @@ export function EditorApp({ initialDoc }: EditorAppProps): React.ReactElement {
 
   const [exportPending, setExportPending] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [zoom, setZoom] = useState<ZoomLevel>(1);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
@@ -148,7 +179,6 @@ export function EditorApp({ initialDoc }: EditorAppProps): React.ReactElement {
 
   const handleSave = useCallback((): void => {
     saveListoFile(doc);
-    // After an explicit save, drop the autosave — we're safe.
     void clearAutosave();
   }, [doc]);
 
@@ -166,7 +196,6 @@ export function EditorApp({ initialDoc }: EditorAppProps): React.ReactElement {
     setExportPending(true);
     setExportError(null);
     try {
-      // Lazy-load the PDF stack; it's heavy and only needed on export.
       const { generateAndDownloadPDF } = await import("../pdf/generator");
       const result = await generateAndDownloadPDF(doc);
       if (!result.success) {
@@ -180,107 +209,151 @@ export function EditorApp({ initialDoc }: EditorAppProps): React.ReactElement {
     }
   }, [doc]);
 
+  const handleMetaChange = useCallback(
+    (patch: Partial<TripMeta>) => {
+      actions.setMeta(patch);
+    },
+    [actions]
+  );
+
+  const handleActivityAdd = useCallback(
+    (dayId: string) => {
+      const blank = createManualActivity({
+        kind: "activity",
+        label: "",
+        time: undefined,
+        notes: undefined,
+      });
+      actions.addActivity(dayId, blank);
+    },
+    [actions]
+  );
+
   const savedLabel = useMemo(() => {
     if (savedAt === null) return null;
     return `Autosaved ${savedAt.toLocaleTimeString()}`;
   }, [savedAt]);
 
   return (
-    <div className="flex h-full min-h-screen flex-col bg-neutral-50">
+    <div className="flex h-full min-h-screen flex-col bg-neutral-100">
       <Toolbar
         tripName={doc.meta.name}
         onSave={handleSave}
-        onLoad={() => { void handleLoad(); }}
-        onExportPdf={() => { void handleExportPdf(); }}
+        onLoad={() => {
+          void handleLoad();
+        }}
+        onExportPdf={() => {
+          void handleExportPdf();
+        }}
         exportPending={exportPending}
         exportError={exportError}
         savedLabel={savedLabel}
-      />
-      <TripHeader
-        meta={doc.meta}
-        onChange={(patch) => { actions.setMeta(patch); }}
+        zoom={zoom}
+        onZoomChange={setZoom}
       />
 
       <div className="flex-1 overflow-auto">
-        <div className="mx-auto grid max-w-7xl grid-cols-1 gap-6 p-6 lg:grid-cols-2">
-          {/* ── Sections column ── */}
-          <div>
-            <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-neutral-500">
-              Sections
-            </div>
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={handleSectionDragEnd}
+        <PaperCanvas zoom={zoom}>
+          <CoverHeader meta={doc.meta} onChange={handleMetaChange} />
+          <SummaryBar doc={doc} onMetaChange={handleMetaChange} />
+
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleSectionDragEnd}
+          >
+            <SortableContext
+              items={doc.sections.map((s) => s.id)}
+              strategy={verticalListSortingStrategy}
             >
-              <SortableContext
-                items={doc.sections.map((s) => s.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                <div className="space-y-4">
-                  {doc.sections.map((section) => (
-                    <SortableSection key={section.id} section={section}>
-                      {(dragHandleProps) => (
-                        <SectionPanel
-                          section={section}
-                          onHeadingChange={(heading) => {
-                            actions.setSectionHeading(section.id, heading);
-                          }}
-                          onBlockChange={(blockId, patch) => {
-                            actions.updateBlock(section.id, blockId, patch);
-                          }}
-                          onBlockRemove={(blockId) => {
-                            actions.removeBlock(section.id, blockId);
-                          }}
-                          onBlockAdd={() => {
+              {doc.sections.map((section) => (
+                <SortableSection key={section.id} id={section.id}>
+                  {(dragHandleProps) => (
+                    <SectionBlock
+                      heading={section.heading}
+                      onHeadingChange={(heading) => {
+                        actions.setSectionHeading(section.id, heading);
+                      }}
+                      isEmpty={section.blocks.length === 0}
+                      emptyHint={emptyHintFor(section.kind)}
+                      dragHandleProps={dragHandleProps}
+                      actions={
+                        <AddButton
+                          onClick={() => {
                             actions.addBlock(section.id, newBlockFor(section));
                           }}
-                          onBlockReorder={(fromId, toId) => {
-                            actions.reorderBlocks(section.id, fromId, toId);
-                          }}
-                          sectionDragHandleProps={dragHandleProps}
-                        />
-                      )}
-                    </SortableSection>
-                  ))}
-                </div>
-              </SortableContext>
-            </DndContext>
-          </div>
+                        >
+                          {addButtonLabelFor(section.kind)}
+                        </AddButton>
+                      }
+                    >
+                      <SectionContent
+                        section={section}
+                        onBlockChange={(blockId, patch) => {
+                          actions.updateBlock(section.id, blockId, patch);
+                        }}
+                        onBlockRemove={(blockId) => {
+                          actions.removeBlock(section.id, blockId);
+                        }}
+                        onBlockReorder={(fromId, toId) => {
+                          actions.reorderBlocks(section.id, fromId, toId);
+                        }}
+                      />
+                    </SectionBlock>
+                  )}
+                </SortableSection>
+              ))}
+            </SortableContext>
+          </DndContext>
 
-          {/* ── Days column ── */}
-          <div>
-            <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-neutral-500">
+          {/* ── Daily itinerary ── */}
+          <section style={{ marginBottom: "26pt" }}>
+            <div
+              style={{
+                fontSize: "7.5pt",
+                letterSpacing: "1.8pt",
+                textTransform: "uppercase",
+                color: "var(--c-mid-gray)",
+                borderBottom: "1pt solid var(--c-rule)",
+                paddingBottom: "5pt",
+                marginBottom: "12pt",
+              }}
+            >
               Daily Itinerary
             </div>
-            <div className="space-y-4">
-              {doc.days.length === 0 ? (
-                <div className="rounded-md border border-dashed border-neutral-200 bg-white p-6 text-center text-sm text-neutral-400">
-                  No days in this trip yet. Update the start and end dates above.
-                </div>
-              ) : (
-                doc.days.map((day) => (
-                  <DayPanel
-                    key={day.id}
-                    day={day}
-                    onActivityChange={(activityId, patch) => {
-                      actions.updateActivity(day.id, activityId, patch);
-                    }}
-                    onActivityRemove={(activityId) => {
-                      actions.removeActivity(day.id, activityId);
-                    }}
-                    onActivityReorder={(fromId, toId) => {
-                      actions.reorderActivities(day.id, fromId, toId);
-                    }}
-                    onActivityAdd={(activity) => {
-                      actions.addActivity(day.id, activity);
-                    }}
-                  />
-                ))
-              )}
-            </div>
-          </div>
-        </div>
+
+            {doc.days.length === 0 ? (
+              <div
+                style={{
+                  fontSize: "9pt",
+                  color: "var(--c-light-gray)",
+                  fontStyle: "italic",
+                  paddingTop: "6pt",
+                  paddingBottom: "6pt",
+                }}
+              >
+                No daily itinerary entries. Set trip dates above to generate days.
+              </div>
+            ) : (
+              <ItineraryTableEditor
+                days={doc.days}
+                onActivityChange={(dayId, activityId, patch) => {
+                  actions.updateActivity(dayId, activityId, patch);
+                }}
+                onActivityRemove={(dayId, activityId) => {
+                  actions.removeActivity(dayId, activityId);
+                }}
+                onActivityReorder={(dayId, fromId, toId) => {
+                  actions.reorderActivities(dayId, fromId, toId);
+                }}
+                onActivityMove={(fromDayId, toDayId, activityId, toIndex) => {
+                  actions.moveActivity(fromDayId, toDayId, activityId, toIndex);
+                }}
+                onActivityAdd={handleActivityAdd}
+              />
+            )}
+          </section>
+        </PaperCanvas>
       </div>
     </div>
   );
