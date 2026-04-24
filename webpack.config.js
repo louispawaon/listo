@@ -34,7 +34,18 @@ module.exports = {
         test: /\.css$/,
         use: [
           MiniCssExtractPlugin.loader,
-          "css-loader",
+          {
+            loader: "css-loader",
+            options: {
+              // Let root-relative `url(/fonts/...)` references through
+              // unchanged — they resolve against the extension's origin at
+              // runtime (chrome-extension://<id>/fonts/…), not against the
+              // CSS file's location at build time.
+              url: {
+                filter: (url) => !url.startsWith("/"),
+              },
+            },
+          },
           "postcss-loader",
         ],
       },
