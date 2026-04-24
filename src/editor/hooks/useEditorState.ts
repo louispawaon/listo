@@ -72,6 +72,14 @@ type Action =
   | { kind: "updateActivity"; dayId: string; activityId: string; patch: Partial<ManualActivity> }
   | { kind: "removeActivity"; dayId: string; activityId: string }
   | { kind: "reorderActivities"; dayId: string; fromId: string; toId: string }
+  | {
+      kind: "moveActivity";
+      fromDayId: string;
+      toDayId: string;
+      activityId: string;
+      /** Target index within destination day. Clamped to [0, dest.length]. */
+      toIndex: number;
+    }
   | { kind: "replace"; doc: ListoDocument };
 
 function mergeBlock(existing: ListoBlock, patch: Partial<ListoBlock>): ListoBlock {
@@ -224,6 +232,54 @@ function reducer(state: ListoDocument, action: Action): ListoDocument {
       };
     }
 
+    case "moveActivity": {
+      // Same-day moves route through reorderActivities. This action is for
+      // cross-day DnD only; if called with the same from/to day we still
+      // handle it correctly (clamped insertion index) but it's redundant.
+      const fromDay = state.days.find((d) => d.id === action.fromDayId);
+      if (fromDay === undefined) return state;
+      const activity = fromDay.activities.find((a) => a.id === action.activityId);
+      if (activity === undefined) return state;
+
+      if (action.fromDayId === action.toDayId) {
+        // Intra-day reorder to a specific index.
+        return {
+          ...state,
+          days: updateDay(state.days, action.fromDayId, (day) => {
+            const fromIndex = indexOfId(day.activities, action.activityId);
+            if (fromIndex === -1) return day;
+            const clamped = Math.max(0, Math.min(action.toIndex, day.activities.length - 1));
+            const next = reorderArray(day.activities, fromIndex, clamped);
+            return { ...day, activities: withOrder(next) };
+          }),
+        };
+      }
+
+      // Cross-day: remove from source, insert into destination.
+      return {
+        ...state,
+        days: state.days.map((day) => {
+          if (day.id === action.fromDayId) {
+            return {
+              ...day,
+              activities: withOrder(
+                day.activities.filter((a) => a.id !== action.activityId)
+              ),
+            };
+          }
+          if (day.id === action.toDayId) {
+            const clamped = Math.max(0, Math.min(action.toIndex, day.activities.length));
+            const next = day.activities.slice();
+            // Insert at clamped index. `activity` keeps its id, blockRef, kind,
+            // label, time, notes — only its `order` is recomputed by withOrder.
+            next.splice(clamped, 0, activity);
+            return { ...day, activities: withOrder(next) };
+          }
+          return day;
+        }),
+      };
+    }
+
     case "replace":
       return action.doc;
   }
@@ -266,6 +322,12 @@ export interface EditorActions {
   ) => void;
   removeActivity: (dayId: string, activityId: string) => void;
   reorderActivities: (dayId: string, fromId: string, toId: string) => void;
+  moveActivity: (
+    fromDayId: string,
+    toDayId: string,
+    activityId: string,
+    toIndex: number
+  ) => void;
   replace: (doc: ListoDocument) => void;
 }
 
@@ -327,6 +389,12 @@ export function useEditorState(initial: ListoDocument): {
     },
     []
   );
+  const moveActivity = useCallback(
+    (fromDayId: string, toDayId: string, activityId: string, toIndex: number) => {
+      dispatch({ kind: "moveActivity", fromDayId, toDayId, activityId, toIndex });
+    },
+    []
+  );
   const replace = useCallback(
     (next: ListoDocument) => { dispatch({ kind: "replace", doc: next }); },
     []
@@ -345,6 +413,7 @@ export function useEditorState(initial: ListoDocument): {
       updateActivity,
       removeActivity,
       reorderActivities,
+      moveActivity,
       replace,
     }),
     [
@@ -359,6 +428,7 @@ export function useEditorState(initial: ListoDocument): {
       updateActivity,
       removeActivity,
       reorderActivities,
+      moveActivity,
       replace,
     ]
   );
