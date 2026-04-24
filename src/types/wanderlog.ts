@@ -96,6 +96,7 @@ export interface WanderlogChecklistBlock {
 
 export interface WanderlogSection {
   heading: string;
+  date?: string; // "YYYY-MM-DD"
   blocks: WanderlogBlock[];
 }
 
