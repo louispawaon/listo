@@ -1,6 +1,5 @@
 import React from "react";
 
-/** Discrete zoom levels exposed in the toolbar. */
 export const ZOOM_LEVELS = [0.5, 0.75, 1, 1.25, 1.5] as const;
 export type ZoomLevel = (typeof ZOOM_LEVELS)[number];
 
@@ -28,40 +27,60 @@ export function Toolbar({
   onZoomChange,
 }: ToolbarProps): React.ReactElement {
   return (
-    <div className="flex items-center justify-between border-b border-neutral-200 bg-white px-6 py-3">
-      <div className="flex items-baseline gap-3">
-        <div className="text-lg font-semibold tracking-tight text-neutral-900">Listo</div>
-        <div className="truncate text-sm text-neutral-500">{tripName || "Untitled trip"}</div>
+    <div
+      className="flex items-center justify-between px-6 py-3 
+      bg-white/70 backdrop-blur-md border-b border-neutral-200"
+    >
+      {/* LEFT — Identity + Context */}
+      <div className="flex items-center gap-4">
+        <div className="text-base font-semibold tracking-tight text-neutral-900">
+          Listo
+        </div>
+
+        <div className="h-4 w-px bg-neutral-300" />
+
+        <div className="flex flex-col leading-tight">
+          <span className="text-sm font-medium text-neutral-800 truncate max-w-[220px]">
+            {tripName || "Untitled trip"}
+          </span>
+          {savedLabel && (
+            <span className="text-[11px] text-neutral-400">{savedLabel}</span>
+          )}
+        </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      {/* RIGHT — Tools */}
+      <div className="flex items-center gap-3">
         <ZoomControl zoom={zoom} onChange={onZoomChange} />
 
-        {savedLabel !== null && (
-          <span className="mr-2 text-xs text-neutral-400">{savedLabel}</span>
+        {exportError && (
+          <span className="text-xs text-red-500">{exportError}</span>
         )}
-        {exportError !== null && (
-          <span className="mr-2 text-xs text-red-600">{exportError}</span>
-        )}
+
+        {/* subtle actions */}
         <button
-          type="button"
           onClick={onLoad}
-          className="rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-800 hover:bg-neutral-50"
+          className="text-xs text-neutral-500 hover:text-neutral-800 transition"
         >
-          Load .listo
+          Import
         </button>
+
         <button
-          type="button"
           onClick={onSave}
-          className="rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-800 hover:bg-neutral-50"
+          className="text-xs text-neutral-500 hover:text-neutral-800 transition"
         >
-          Save .listo
+          Save
         </button>
+
+        {/* PRIMARY CTA */}
         <button
-          type="button"
           onClick={onExportPdf}
           disabled={exportPending}
-          className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-400"
+          className="ml-2 rounded-full px-4 py-1.5 text-sm font-medium
+            bg-neutral-900 text-white
+            shadow-sm hover:shadow-md hover:translate-y-[-0.5px]
+            active:translate-y-0 transition
+            disabled:bg-neutral-400 disabled:cursor-not-allowed"
         >
           {exportPending ? "Exporting…" : "Export PDF"}
         </button>
@@ -70,58 +89,45 @@ export function Toolbar({
   );
 }
 
-// ─── Zoom control (decrement / label / increment) ───────────────────────────
+// ─── Zoom Control (more tactile / tool-like) ────────────────────────────────
 
 interface ZoomControlProps {
   zoom: ZoomLevel;
   onChange: (next: ZoomLevel) => void;
 }
 
-function ZoomControl({ zoom, onChange }: ZoomControlProps): React.ReactElement {
-  const currentIndex = ZOOM_LEVELS.indexOf(zoom);
-  const canDec = currentIndex > 0;
-  const canInc = currentIndex < ZOOM_LEVELS.length - 1;
-
-  const dec = (): void => {
-    if (canDec) {
-      const next = ZOOM_LEVELS[currentIndex - 1];
-      if (next !== undefined) onChange(next);
-    }
-  };
-  const inc = (): void => {
-    if (canInc) {
-      const next = ZOOM_LEVELS[currentIndex + 1];
-      if (next !== undefined) onChange(next);
-    }
-  };
+function ZoomControl({ zoom, onChange }: ZoomControlProps) {
+  const index = ZOOM_LEVELS.indexOf(zoom);
 
   return (
-    <div className="mr-2 flex items-center gap-1 rounded-md border border-neutral-200 bg-white px-1 py-0.5">
+    <div
+      className="flex items-center gap-1 
+      rounded-full bg-neutral-100 px-1.5 py-0.5 shadow-inner"
+    >
       <button
-        type="button"
-        onClick={dec}
-        disabled={!canDec}
-        aria-label="Zoom out"
-        className="rounded px-1.5 text-xs text-neutral-600 hover:bg-neutral-100 disabled:cursor-not-allowed disabled:text-neutral-300"
+        onClick={() => {
+          const prev = ZOOM_LEVELS[index - 1];
+          if (prev !== undefined) onChange(prev);
+        }}
+        disabled={index === 0}
       >
         −
       </button>
+
       <button
-        type="button"
-        onClick={() => {
-          onChange(1);
-        }}
-        aria-label="Reset zoom"
-        className="min-w-[3ch] rounded px-1 text-center text-xs font-medium tabular-nums text-neutral-700 hover:bg-neutral-100"
+        onClick={() => onChange(1)}
+        className="min-w-[42px] text-center text-xs font-medium 
+          tabular-nums text-neutral-800 hover:text-black"
       >
         {Math.round(zoom * 100)}%
       </button>
+
       <button
-        type="button"
-        onClick={inc}
-        disabled={!canInc}
-        aria-label="Zoom in"
-        className="rounded px-1.5 text-xs text-neutral-600 hover:bg-neutral-100 disabled:cursor-not-allowed disabled:text-neutral-300"
+        onClick={() => {
+          const next = ZOOM_LEVELS[index + 1];
+          if (next !== undefined) onChange(next);
+        }}
+        disabled={index === ZOOM_LEVELS.length - 1}
       >
         +
       </button>
