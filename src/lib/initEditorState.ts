@@ -5,7 +5,8 @@
  * NOT run when loading a `.listo` file — those go straight to the editor.
  *
  * v1 hydration rules (matches plan decisions):
- * - Four sections in fixed order: flights, hotels, places, notes (notes empty).
+ * - Flights and hotels always; places only when Wanderlog has place items.
+ * - Notes are Listo-only and omitted on init (added manually or from a saved file).
  * - Each block gets a `crypto.randomUUID()` id; `order` is 0..n-1.
  * - Days are generated chronologically from `startDate` to `endDate` so empty
  *   days exist as editable shells even if the extractor dropped them.
@@ -21,7 +22,6 @@ import type {
   ListoDocument,
   ListoFlightBlock,
   ListoHotelBlock,
-  ListoNoteBlock,
   ListoPlaceBlock,
   ListoSection,
   ListoSectionKind,
@@ -82,11 +82,15 @@ function deriveDestination(tripData: TripData): string {
 }
 
 function buildMeta(tripData: TripData): TripMeta {
+  const name = tripData.name;
+  const startDate = tripData.startDate;
+  const endDate = tripData.endDate;
   return {
-    name: tripData.name,
-    startDate: tripData.startDate,
-    endDate: tripData.endDate,
+    name,
+    startDate,
+    endDate,
     destination: deriveDestination(tripData),
+    lastSynced: { name, startDate, endDate },
   };
 }
 
@@ -102,16 +106,26 @@ const SECTION_HEADINGS: Record<ListoSectionKind, string> = {
 // ─── Block hydration ─────────────────────────────────────────────────────────
 
 function buildFlightBlocks(tripData: TripData): ListoFlightBlock[] {
-  return tripData.flights.map((flight, index) => ({
-    id: uuid(),
-    type: "flight",
-    order: index,
-    wanderlogId: flight.id,
-    airline: flight.airline,
-    flightNumber: flight.flightNumber,
-    depart: { ...flight.depart },
-    arrive: { ...flight.arrive },
-  }));
+  return tripData.flights.map((flight, index) => {
+    const depart = { ...flight.depart };
+    const arrive = { ...flight.arrive };
+    return {
+      id: uuid(),
+      type: "flight",
+      order: index,
+      wanderlogId: flight.id,
+      airline: flight.airline,
+      flightNumber: flight.flightNumber,
+      depart,
+      arrive,
+      lastSynced: {
+        airline: flight.airline,
+        flightNumber: flight.flightNumber,
+        depart: { ...depart },
+        arrive: { ...arrive },
+      },
+    };
+  });
 }
 
 function buildHotelBlocks(tripData: TripData): ListoHotelBlock[] {
@@ -127,6 +141,15 @@ function buildHotelBlocks(tripData: TripData): ListoHotelBlock[] {
     confirmationNumber: hotel.confirmationNumber,
     phone: hotel.phone,
     website: hotel.website,
+    lastSynced: {
+      name: hotel.name,
+      address: hotel.address,
+      checkIn: hotel.checkIn,
+      checkOut: hotel.checkOut,
+      confirmationNumber: hotel.confirmationNumber,
+      phone: hotel.phone,
+      website: hotel.website,
+    },
   }));
 }
 
@@ -139,31 +162,43 @@ function buildPlaceBlocks(tripData: TripData): ListoPlaceBlock[] {
     name: place.name,
     address: place.address,
     rating: place.rating,
+    lastSynced: {
+      name: place.name,
+      address: place.address,
+      rating: place.rating,
+    },
   }));
-}
-
-function buildNoteBlocks(): ListoNoteBlock[] {
-  return [];
 }
 
 function buildSections(tripData: TripData): ListoSection[] {
-  const flights = buildFlightBlocks(tripData);
-  const hotels = buildHotelBlocks(tripData);
-  const places = buildPlaceBlocks(tripData);
-  const notes = buildNoteBlocks();
+  const sections: ListoSection[] = [
+    {
+      id: uuid(),
+      kind: "flights",
+      heading: SECTION_HEADINGS.flights,
+      order: 0,
+      blocks: buildFlightBlocks(tripData),
+    },
+    {
+      id: uuid(),
+      kind: "hotels",
+      heading: SECTION_HEADINGS.hotels,
+      order: 1,
+      blocks: buildHotelBlocks(tripData),
+    },
+  ];
 
-  const kinds: ListoSectionKind[] = ["flights", "hotels", "places", "notes"];
-  return kinds.map((kind, index): ListoSection => ({
-    id: uuid(),
-    kind,
-    heading: SECTION_HEADINGS[kind],
-    order: index,
-    blocks:
-      kind === "flights" ? flights :
-      kind === "hotels" ? hotels :
-      kind === "places" ? places :
-      notes,
-  }));
+  if (tripData.places.length > 0) {
+    sections.push({
+      id: uuid(),
+      kind: "places",
+      heading: SECTION_HEADINGS.places,
+      order: sections.length,
+      blocks: buildPlaceBlocks(tripData),
+    });
+  }
+
+  return sections;
 }
 
 // ─── Day generation ──────────────────────────────────────────────────────────
@@ -220,15 +255,19 @@ function toManualActivity(
   row: TripItineraryRow,
   order: number
 ): ManualActivity {
+  const kind = mapRowKindToManualKind(row.kind);
+  const label = row.place;
+  const time = row.time;
   return {
     id: uuid(),
     source: "manual",
     order,
-    kind: mapRowKindToManualKind(row.kind),
-    label: row.place,
-    time: row.time,
+    kind,
+    label,
+    time,
     notes: undefined,
     wanderlogKey: buildWanderlogActivityKey(date, row),
+    lastSynced: { kind, label, time },
   };
 }
 
@@ -244,6 +283,7 @@ function buildDays(tripData: TripData): TripDay[] {
       label: day.label,
       order: index,
       activities: day.rows.map((row, rowIndex) => toManualActivity(day.date, row, rowIndex)),
+      ...(day.date !== null ? { lastSynced: { label: day.label } } : {}),
     }));
   }
 
@@ -262,12 +302,14 @@ function buildDays(tripData: TripData): TripDay[] {
 
   return dateList.map((date, index): TripDay => {
     const rows = rowsByDate.get(date) ?? [];
+    const label = formatDayLabel(date, index);
     return {
       id: uuid(),
       date,
-      label: formatDayLabel(date, index),
+      label,
       order: index,
       activities: rows.map((row, rowIndex) => toManualActivity(date, row, rowIndex)),
+      lastSynced: { label },
     };
   });
 }

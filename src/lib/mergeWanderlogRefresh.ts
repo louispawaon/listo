@@ -10,13 +10,22 @@ import type {
   ListoBlock,
   ListoDocument,
   ListoFlightBlock,
+  ListoFlightSyncSnapshot,
   ListoHotelBlock,
+  ListoHotelSyncSnapshot,
   ListoPlaceBlock,
+  ListoPlaceSyncSnapshot,
   ListoSection,
   ListoSectionKind,
   ManualActivity,
+  ManualActivitySyncSnapshot,
   TripDay,
+  TripMetaSyncSnapshot,
 } from "../types/listo";
+import {
+  adjustItineraryIndexAfterSectionRemoval,
+  sectionsInPaperOrder,
+} from "./paperLayout";
 
 export interface MergeSummary {
   addedBlocks: number;
@@ -32,6 +41,58 @@ function withOrder<T extends { order: number }>(items: T[]): T[] {
   return items.map((item, index) => ({ ...item, order: index }));
 }
 
+function valuesEqual<T>(a: T, b: T): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/** 3-way merge: keep local edits, apply Wanderlog updates to untouched fields. */
+function pickSyncedValue<T>(current: T, lastSynced: T | undefined, fresh: T): T {
+  if (lastSynced === undefined) {
+    return current;
+  }
+  if (valuesEqual(current, lastSynced)) {
+    return fresh;
+  }
+  return current;
+}
+
+function flightSyncSnapshot(block: ListoFlightBlock): ListoFlightSyncSnapshot {
+  return {
+    airline: block.airline,
+    flightNumber: block.flightNumber,
+    depart: { ...block.depart },
+    arrive: { ...block.arrive },
+  };
+}
+
+function hotelSyncSnapshot(block: ListoHotelBlock): ListoHotelSyncSnapshot {
+  return {
+    name: block.name,
+    address: block.address,
+    checkIn: block.checkIn,
+    checkOut: block.checkOut,
+    confirmationNumber: block.confirmationNumber,
+    phone: block.phone,
+    website: block.website,
+  };
+}
+
+function placeSyncSnapshot(block: ListoPlaceBlock): ListoPlaceSyncSnapshot {
+  return {
+    name: block.name,
+    address: block.address,
+    rating: block.rating,
+  };
+}
+
+function activitySyncSnapshot(activity: ManualActivity): ManualActivitySyncSnapshot {
+  return {
+    kind: activity.kind,
+    label: activity.label,
+    time: activity.time,
+  };
+}
+
 function getSectionByKind(
   sections: ListoSection[],
   kind: ListoSectionKind
@@ -43,12 +104,15 @@ function mergeFlightBlock(
   current: ListoFlightBlock,
   fresh: ListoFlightBlock
 ): ListoFlightBlock {
+  const snap = current.lastSynced;
+  const freshSnap = flightSyncSnapshot(fresh);
   return {
     ...current,
-    airline: fresh.airline,
-    flightNumber: fresh.flightNumber,
-    depart: { ...fresh.depart },
-    arrive: { ...fresh.arrive },
+    airline: pickSyncedValue(current.airline, snap?.airline, fresh.airline),
+    flightNumber: pickSyncedValue(current.flightNumber, snap?.flightNumber, fresh.flightNumber),
+    depart: pickSyncedValue(current.depart, snap?.depart, fresh.depart),
+    arrive: pickSyncedValue(current.arrive, snap?.arrive, fresh.arrive),
+    lastSynced: freshSnap,
   };
 }
 
@@ -56,15 +120,22 @@ function mergeHotelBlock(
   current: ListoHotelBlock,
   fresh: ListoHotelBlock
 ): ListoHotelBlock {
+  const snap = current.lastSynced;
+  const freshSnap = hotelSyncSnapshot(fresh);
   return {
     ...current,
-    name: fresh.name,
-    address: fresh.address,
-    checkIn: fresh.checkIn,
-    checkOut: fresh.checkOut,
-    confirmationNumber: fresh.confirmationNumber,
-    phone: fresh.phone,
-    website: fresh.website,
+    name: pickSyncedValue(current.name, snap?.name, fresh.name),
+    address: pickSyncedValue(current.address, snap?.address, fresh.address),
+    checkIn: pickSyncedValue(current.checkIn, snap?.checkIn, fresh.checkIn),
+    checkOut: pickSyncedValue(current.checkOut, snap?.checkOut, fresh.checkOut),
+    confirmationNumber: pickSyncedValue(
+      current.confirmationNumber,
+      snap?.confirmationNumber,
+      fresh.confirmationNumber
+    ),
+    phone: pickSyncedValue(current.phone, snap?.phone, fresh.phone),
+    website: pickSyncedValue(current.website, snap?.website, fresh.website),
+    lastSynced: freshSnap,
   };
 }
 
@@ -72,11 +143,14 @@ function mergePlaceBlock(
   current: ListoPlaceBlock,
   fresh: ListoPlaceBlock
 ): ListoPlaceBlock {
+  const snap = current.lastSynced;
+  const freshSnap = placeSyncSnapshot(fresh);
   return {
     ...current,
-    name: fresh.name,
-    address: fresh.address,
-    rating: fresh.rating,
+    name: pickSyncedValue(current.name, snap?.name, fresh.name),
+    address: pickSyncedValue(current.address, snap?.address, fresh.address),
+    rating: pickSyncedValue(current.rating, snap?.rating, fresh.rating),
+    lastSynced: freshSnap,
   };
 }
 
@@ -281,11 +355,14 @@ function mergeActivities(
       continue;
     }
 
+    const snap = existing.lastSynced;
+    const freshSnap = activitySyncSnapshot(fresh);
     const next: ManualActivity = {
       ...existing,
-      kind: fresh.kind,
-      label: fresh.label,
-      time: fresh.time,
+      kind: pickSyncedValue(existing.kind, snap?.kind, fresh.kind),
+      label: pickSyncedValue(existing.label, snap?.label, fresh.label),
+      time: pickSyncedValue(existing.time, snap?.time, fresh.time),
+      lastSynced: freshSnap,
     };
     if (
       existing.label !== next.label ||
@@ -352,9 +429,11 @@ function mergeDays(
     updatedActivities += updated;
     removedActivities += removed;
 
+    const freshSnap = { label: freshDay.label };
     return {
       ...day,
-      label: freshDay.label,
+      label: pickSyncedValue(day.label, day.lastSynced?.label, freshDay.label),
+      lastSynced: freshSnap,
       activities,
     };
   });
@@ -380,15 +459,28 @@ function mergeDays(
 
 const SYNCABLE_SECTION_KINDS: ListoSectionKind[] = ["flights", "hotels", "places"];
 
-export function mergeWanderlogRefresh(
-  currentDoc: ListoDocument,
-  freshDoc: ListoDocument
-): { doc: ListoDocument; summary: MergeSummary } {
+function isOptionalSectionKind(kind: ListoSectionKind): boolean {
+  return kind === "places" || kind === "notes";
+}
+
+function shouldDropSection(section: ListoSection): boolean {
+  return isOptionalSectionKind(section.kind) && section.blocks.length === 0;
+}
+
+function mergeSections(
+  currentSections: ListoSection[],
+  freshSections: ListoSection[]
+): {
+  sections: ListoSection[];
+  addedBlocks: number;
+  updatedBlocks: number;
+  removedBlocks: number;
+} {
   let addedBlocks = 0;
   let updatedBlocks = 0;
   let removedBlocks = 0;
 
-  const mergedSections = currentDoc.sections.map((section) => {
+  let merged = currentSections.map((section) => {
     if (section.kind === "notes") {
       return section;
     }
@@ -397,7 +489,7 @@ export function mergeWanderlogRefresh(
       return section;
     }
 
-    const freshSection = getSectionByKind(freshDoc.sections, section.kind);
+    const freshSection = getSectionByKind(freshSections, section.kind);
     if (freshSection === undefined) {
       return section;
     }
@@ -413,6 +505,49 @@ export function mergeWanderlogRefresh(
     return { ...section, blocks };
   });
 
+  merged = merged.filter((section) => !shouldDropSection(section));
+
+  const hasPlaces = merged.some((section) => section.kind === "places");
+  const freshPlaces = getSectionByKind(freshSections, "places");
+  if (
+    !hasPlaces &&
+    freshPlaces !== undefined &&
+    freshPlaces.blocks.length > 0
+  ) {
+    const sorted = sectionsInPaperOrder({ sections: merged });
+    const hotelsIndex = sorted.findIndex((section) => section.kind === "hotels");
+    const insertAt = hotelsIndex >= 0 ? hotelsIndex + 1 : sorted.length;
+    merged = [
+      ...sorted.slice(0, insertAt),
+      freshPlaces,
+      ...sorted.slice(insertAt),
+    ];
+    addedBlocks += freshPlaces.blocks.length;
+  }
+
+  return {
+    sections: withOrder(merged),
+    addedBlocks,
+    updatedBlocks,
+    removedBlocks,
+  };
+}
+
+export function mergeWanderlogRefresh(
+  currentDoc: ListoDocument,
+  freshDoc: ListoDocument
+): { doc: ListoDocument; summary: MergeSummary } {
+  const { sections: mergedSections, addedBlocks, updatedBlocks, removedBlocks } = mergeSections(
+    currentDoc.sections,
+    freshDoc.sections
+  );
+
+  const itineraryIndex = adjustItineraryIndexAfterSectionRemoval(
+    currentDoc.itineraryIndex,
+    currentDoc.sections,
+    mergedSections
+  );
+
   const { days, addedDays, addedActivities, updatedActivities, removedActivities } = mergeDays(
     currentDoc.days,
     freshDoc.days
@@ -420,17 +555,31 @@ export function mergeWanderlogRefresh(
 
   const wanderlogUrl = freshDoc.wanderlogUrl ?? currentDoc.wanderlogUrl;
 
+  const currentMeta = currentDoc.meta;
+  const freshMetaSnap: TripMetaSyncSnapshot = {
+    name: freshDoc.meta.name,
+    startDate: freshDoc.meta.startDate,
+    endDate: freshDoc.meta.endDate,
+  };
+  const metaSnap = currentMeta.lastSynced;
+
   const doc: ListoDocument = {
     ...currentDoc,
     savedAt: new Date().toISOString(),
     ...(wanderlogUrl !== undefined ? { wanderlogUrl } : {}),
     meta: {
-      ...currentDoc.meta,
-      name: freshDoc.meta.name,
-      startDate: freshDoc.meta.startDate,
-      endDate: freshDoc.meta.endDate,
+      ...currentMeta,
+      name: pickSyncedValue(currentMeta.name, metaSnap?.name, freshDoc.meta.name),
+      startDate: pickSyncedValue(
+        currentMeta.startDate,
+        metaSnap?.startDate,
+        freshDoc.meta.startDate
+      ),
+      endDate: pickSyncedValue(currentMeta.endDate, metaSnap?.endDate, freshDoc.meta.endDate),
+      lastSynced: freshMetaSnap,
     },
     sections: mergedSections,
+    itineraryIndex,
     days,
   };
 

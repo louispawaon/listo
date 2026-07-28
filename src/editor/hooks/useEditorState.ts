@@ -22,7 +22,7 @@ import type {
   TripDay,
   TripMeta,
 } from "../../types/listo";
-import { LISTO_ITINERARY_SORTABLE_ID } from "../../lib/paperLayout";
+import { LISTO_ITINERARY_SORTABLE_ID, adjustItineraryIndexAfterSectionRemoval } from "../../lib/paperLayout";
 
 // ─── UUID ────────────────────────────────────────────────────────────────────
 
@@ -68,6 +68,7 @@ type Action =
   | { kind: "addBlock"; sectionId: string; block: ListoBlock }
   | { kind: "updateBlock"; sectionId: string; blockId: string; patch: Partial<ListoBlock> }
   | { kind: "removeBlock"; sectionId: string; blockId: string }
+  | { kind: "removeSection"; sectionId: string }
   | { kind: "reorderBlocks"; sectionId: string; fromId: string; toId: string }
   | { kind: "addActivity"; dayId: string; activity: Activity }
   | { kind: "updateActivity"; dayId: string; activityId: string; patch: Partial<ManualActivity> }
@@ -190,6 +191,26 @@ function reducer(state: ListoDocument, action: Action): ListoDocument {
           blocks: withOrder(section.blocks.filter((block) => block.id !== action.blockId)),
         })),
       };
+
+    case "removeSection": {
+      const section = state.sections.find((item) => item.id === action.sectionId);
+      if (section === undefined) return state;
+      if (section.kind !== "places" && section.kind !== "notes") return state;
+
+      const nextSections = withOrder(
+        state.sections.filter((item) => item.id !== action.sectionId)
+      );
+
+      return {
+        ...state,
+        sections: nextSections,
+        itineraryIndex: adjustItineraryIndexAfterSectionRemoval(
+          state.itineraryIndex,
+          state.sections,
+          nextSections
+        ),
+      };
+    }
 
     case "reorderBlocks": {
       return {
@@ -332,6 +353,7 @@ export interface EditorActions {
   addBlock: (sectionId: string, block: ListoBlock) => void;
   updateBlock: (sectionId: string, blockId: string, patch: Partial<ListoBlock>) => void;
   removeBlock: (sectionId: string, blockId: string) => void;
+  removeSection: (sectionId: string) => void;
   reorderBlocks: (sectionId: string, fromId: string, toId: string) => void;
   addActivity: (dayId: string, activity: Activity) => void;
   updateActivity: (
@@ -382,6 +404,10 @@ export function useEditorState(initial: ListoDocument): {
     (sectionId: string, blockId: string) => { dispatch({ kind: "removeBlock", sectionId, blockId }); },
     []
   );
+  const removeSection = useCallback(
+    (sectionId: string) => { dispatch({ kind: "removeSection", sectionId }); },
+    []
+  );
   const reorderBlocks = useCallback(
     (sectionId: string, fromId: string, toId: string) => {
       dispatch({ kind: "reorderBlocks", sectionId, fromId, toId });
@@ -427,6 +453,7 @@ export function useEditorState(initial: ListoDocument): {
       addBlock,
       updateBlock,
       removeBlock,
+      removeSection,
       reorderBlocks,
       addActivity,
       updateActivity,
@@ -442,6 +469,7 @@ export function useEditorState(initial: ListoDocument): {
       addBlock,
       updateBlock,
       removeBlock,
+      removeSection,
       reorderBlocks,
       addActivity,
       updateActivity,

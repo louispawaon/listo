@@ -29,7 +29,7 @@ import { Toolbar, type ZoomLevel } from "./components/Toolbar";
 import { PaperCanvas } from "./components/PaperCanvas";
 import { CoverHeader } from "./components/pdf-styled/CoverHeader";
 import { SummaryBar } from "./components/pdf-styled/SummaryBar";
-import { SectionBlock, AddButton } from "./components/pdf-styled/SectionBlock";
+import { SectionBlock, AddButton, DeleteSectionButton } from "./components/pdf-styled/SectionBlock";
 import { SectionContent } from "./components/pdf-styled/SectionContent";
 import { ItineraryTableEditor } from "./components/pdf-styled/ItineraryTableEditor";
 import { useEditorState, createManualActivity } from "./hooks/useEditorState";
@@ -129,6 +129,10 @@ function emptyHintFor(kind: ListoSection["kind"]): string {
     case "notes":
       return "No notes recorded. Click + Note to add one.";
   }
+}
+
+function isDeletableSectionKind(kind: ListoSection["kind"]): boolean {
+  return kind === "places" || kind === "notes";
 }
 
 // ─── Sortable wrapper for section-level DnD ──────────────────────────────────
@@ -332,13 +336,23 @@ export function EditorApp({ initialDoc }: EditorAppProps): React.ReactElement {
                         emptyHint={emptyHintFor(section.kind)}
                         dragHandleProps={dragHandleProps}
                         actions={
-                          <AddButton
-                            onClick={() => {
-                              actions.addBlock(section.id, newBlockFor(section));
-                            }}
-                          >
-                            {addButtonLabelFor(section.kind)}
-                          </AddButton>
+                          <div className="flex items-center gap-2">
+                            <AddButton
+                              onClick={() => {
+                                actions.addBlock(section.id, newBlockFor(section));
+                              }}
+                            >
+                              {addButtonLabelFor(section.kind)}
+                            </AddButton>
+                            {isDeletableSectionKind(section.kind) && (
+                              <DeleteSectionButton
+                                label={`Remove ${section.heading} section`}
+                                onClick={() => {
+                                  actions.removeSection(section.id);
+                                }}
+                              />
+                            )}
+                          </div>
                         }
                       >
                         <SectionContent

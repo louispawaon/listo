@@ -38,11 +38,19 @@ export type ListoSource = "wanderlog" | "listo-file";
 
 // ─── Meta ────────────────────────────────────────────────────────────────────
 
+export interface TripMetaSyncSnapshot {
+  name: string;
+  startDate: string;
+  endDate: string;
+}
+
 export interface TripMeta {
   name: string;
   startDate: string;
   endDate: string;
   destination: string;
+  /** Wanderlog values at last sync; used for 3-way merge on resync. */
+  lastSynced?: TripMetaSyncSnapshot;
 }
 
 // ─── Sections ────────────────────────────────────────────────────────────────
@@ -75,6 +83,13 @@ export interface ListoFlightEndpoint {
   time: string;
 }
 
+export interface ListoFlightSyncSnapshot {
+  airline: string;
+  flightNumber: string;
+  depart: ListoFlightEndpoint;
+  arrive: ListoFlightEndpoint;
+}
+
 export interface ListoFlightBlock {
   id: string;
   type: "flight";
@@ -85,6 +100,18 @@ export interface ListoFlightBlock {
   flightNumber: string;
   depart: ListoFlightEndpoint;
   arrive: ListoFlightEndpoint;
+  /** Wanderlog values at last sync; used for 3-way merge on resync. */
+  lastSynced?: ListoFlightSyncSnapshot;
+}
+
+export interface ListoHotelSyncSnapshot {
+  name: string;
+  address: string;
+  checkIn: string;
+  checkOut: string;
+  confirmationNumber: string | null;
+  phone: string | null;
+  website: string | null;
 }
 
 export interface ListoHotelBlock {
@@ -100,6 +127,14 @@ export interface ListoHotelBlock {
   confirmationNumber: string | null;
   phone: string | null;
   website: string | null;
+  /** Wanderlog values at last sync; used for 3-way merge on resync. */
+  lastSynced?: ListoHotelSyncSnapshot;
+}
+
+export interface ListoPlaceSyncSnapshot {
+  name: string;
+  address: string;
+  rating: number;
 }
 
 export interface ListoPlaceBlock {
@@ -111,6 +146,8 @@ export interface ListoPlaceBlock {
   name: string;
   address: string;
   rating: number;
+  /** Wanderlog values at last sync; used for 3-way merge on resync. */
+  lastSynced?: ListoPlaceSyncSnapshot;
 }
 
 export interface ListoNoteBlock {
@@ -123,12 +160,18 @@ export interface ListoNoteBlock {
 
 // ─── Days ────────────────────────────────────────────────────────────────────
 
+export interface TripDaySyncSnapshot {
+  label: string;
+}
+
 export interface TripDay {
   id: string;
   date: string | null;
   label: string;
   order: number;
   activities: Activity[];
+  /** Wanderlog values at last sync; used for 3-way merge on resync. */
+  lastSynced?: TripDaySyncSnapshot;
 }
 
 // ─── Activities ──────────────────────────────────────────────────────────────
@@ -148,6 +191,12 @@ export interface AutoActivity {
   blockRef: string;
 }
 
+export interface ManualActivitySyncSnapshot {
+  kind: ManualActivityKind;
+  label: string;
+  time: string | undefined;
+}
+
 export interface ManualActivity {
   id: string;
   source: "manual";
@@ -158,4 +207,6 @@ export interface ManualActivity {
   notes: string | undefined;
   /** Stable key from Wanderlog row; set during extraction for sync matching. */
   wanderlogKey?: string;
+  /** Wanderlog values at last sync; used for 3-way merge on resync. */
+  lastSynced?: ManualActivitySyncSnapshot;
 }

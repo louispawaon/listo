@@ -126,3 +126,25 @@ export function AddButton({ onClick, children }: AddButtonProps): React.ReactEle
     </button>
   );
 }
+
+interface DeleteSectionButtonProps {
+  onClick: () => void;
+  label: string;
+}
+
+export function DeleteSectionButton({
+  onClick,
+  label,
+}: DeleteSectionButtonProps): React.ReactElement {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      className="rounded border border-dashed border-neutral-300 px-2 py-0.5 text-[8pt] font-medium uppercase tracking-wider text-neutral-400 hover:border-red-300 hover:text-red-600"
+      style={{ letterSpacing: "0.8pt" }}
+    >
+      Remove section
+    </button>
+  );
+}

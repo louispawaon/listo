@@ -20,6 +20,29 @@ export function sectionsInPaperOrder(doc: Pick<ListoDocument, "sections">): List
   return [...doc.sections].sort((a, b) => a.order - b.order);
 }
 
+/**
+ * When optional sections are removed, shift `itineraryIndex` down for each
+ * removed section that sat before the itinerary insertion point.
+ */
+export function adjustItineraryIndexAfterSectionRemoval(
+  itineraryIndex: number | undefined,
+  oldSections: ListoSection[],
+  newSections: ListoSection[]
+): number {
+  const oldSorted = sectionsInPaperOrder({ sections: oldSections });
+  const newIds = new Set(newSections.map((section) => section.id));
+  const raw = itineraryIndex ?? oldSections.length;
+  let adjusted = raw;
+
+  for (let i = 0; i < Math.min(raw, oldSorted.length); i++) {
+    if (!newIds.has(oldSorted[i]!.id)) {
+      adjusted -= 1;
+    }
+  }
+
+  return Math.max(0, Math.min(adjusted, newSections.length));
+}
+
 /** Flat id list passed to `SortableContext` / `reorderPaperLayout`. */
 export function buildPaperSortIds(doc: ListoDocument): string[] {
   const itineraryIndex = resolvedItineraryIndex(doc);
