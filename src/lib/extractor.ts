@@ -11,7 +11,6 @@
 
 import type {
   WanderlogBlock,
-  WanderlogChecklistBlock,
   WanderlogFlightBlock,
   WanderlogMobXState,
   WanderlogPlaceBlock,
@@ -22,10 +21,9 @@ import type {
   TripData,
   TripFlight,
   TripHotel,
-  TripItineraryDay,
-  TripItineraryRow,
   TripPlace,
 } from "../types/trip";
+import { extractItineraryDaysFromWanderlog } from "./itineraryFromWanderlog";
 
 // ─── Section Heading Keywords ────────────────────────────────────────────────
 // Matched case-insensitively. Extend if Wanderlog ever localises headings.
@@ -105,10 +103,6 @@ function isPlaceBlock(block: WanderlogBlock): block is WanderlogPlaceBlock {
   return block.type === "place";
 }
 
-function isChecklistBlock(block: WanderlogBlock): block is WanderlogChecklistBlock {
-  return block.type === "checklist";
-}
-
 function isHotelBlock(block: WanderlogPlaceBlock): block is WanderlogPlaceBlock & {
   hotel: NonNullable<WanderlogPlaceBlock["hotel"]>;
 } {
@@ -135,165 +129,19 @@ function safeObject(val: unknown): Record<string, unknown> | null {
   return typeof val === "object" && val !== null ? (val as Record<string, unknown>) : null;
 }
 
-function safeTime(val: unknown): string | undefined {
-  const s = safeString(val);
-  return s !== null ? s : undefined;
-}
-
-function parseDayDate(heading: string): string | null {
-  const match = heading.match(/\d{4}-\d{2}-\d{2}/);
-  return match !== null ? match[0] : null;
-}
-
-function addDays(isoDate: string, dayOffset: number): string | null {
-  const base = new Date(`${isoDate}T00:00:00`);
-  if (Number.isNaN(base.getTime())) {
-    return null;
+function extractGeoDestination(
+  state: WanderlogMobXState
+): { name: string | null; countryName: string | null } {
+  const dataRecord = state.tripPlanStore.data as unknown as Record<string, unknown>;
+  const resources = safeObject(dataRecord["resources"]);
+  const geo = resources !== null ? safeObject(resources["geo"]) : null;
+  if (geo === null) {
+    return { name: null, countryName: null };
   }
-  base.setDate(base.getDate() + dayOffset);
-  return base.toISOString().slice(0, 10);
-}
-
-function buildDayLabel(index: number, isoDate: string | null): string {
-  if (isoDate === null) {
-    return `Day ${index + 1}`;
-  }
-  const readableDate = new Date(`${isoDate}T00:00:00`).toLocaleDateString("en-PH", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-  return `Day ${index + 1} - ${readableDate}`;
-}
-
-function pickInboundFlight(flights: TripFlight[], tripStartDate: string): TripFlight | null {
-  if (flights.length === 0) return null;
-
-  const sameDay = flights
-    .filter((flight) => flight.arrive.date === tripStartDate)
-    .sort((a, b) => a.arrive.time.localeCompare(b.arrive.time));
-
-  if (sameDay.length > 0) {
-    return sameDay[0] ?? null;
-  }
-
-  return (
-    [...flights].sort((a, b) => {
-    const aStamp = `${a.arrive.date}T${a.arrive.time}`;
-    const bStamp = `${b.arrive.date}T${b.arrive.time}`;
-    return aStamp.localeCompare(bStamp);
-    })[0] ?? null
-  );
-}
-
-function pickCheckInHotel(hotels: TripHotel[], tripStartDate: string): TripHotel | null {
-  if (hotels.length === 0) return null;
-  const exactMatch = hotels.find((hotel) => hotel.checkIn === tripStartDate);
-  return exactMatch ?? hotels[0] ?? null;
-}
-
-function pickOutboundFlight(flights: TripFlight[], tripEndDate: string): TripFlight | null {
-  if (flights.length === 0) return null;
-
-  const sameDay = flights
-    .filter((flight) => flight.depart.date === tripEndDate)
-    .sort((a, b) => a.depart.time.localeCompare(b.depart.time));
-
-  if (sameDay.length > 0) {
-    return sameDay[sameDay.length - 1] ?? null;
-  }
-
-  return (
-    [...flights].sort((a, b) => {
-      const aStamp = `${a.depart.date}T${a.depart.time}`;
-      const bStamp = `${b.depart.date}T${b.depart.time}`;
-      return bStamp.localeCompare(aStamp);
-    })[0] ?? null
-  );
-}
-
-function pickCheckOutHotel(hotels: TripHotel[], tripEndDate: string): TripHotel | null {
-  if (hotels.length === 0) return null;
-  const exactMatch = hotels.find((hotel) => hotel.checkOut === tripEndDate);
-  if (exactMatch !== undefined) {
-    return exactMatch;
-  }
-  return (
-    [...hotels].sort((a, b) => b.checkOut.localeCompare(a.checkOut))[0] ?? null
-  );
-}
-
-function createItineraryRow(
-  kind: TripItineraryRow["kind"],
-  place: string,
-  time?: string
-): TripItineraryRow {
-  return time !== undefined ? { kind, place, time } : { kind, place };
-}
-
-function buildAutoStartRows(
-  flights: TripFlight[],
-  hotels: TripHotel[],
-  tripStartDate: string
-): TripItineraryRow[] {
-  const rows: TripItineraryRow[] = [];
-  const inboundFlight = pickInboundFlight(flights, tripStartDate);
-  if (inboundFlight !== null) {
-    rows.push(
-      createItineraryRow(
-        "flight",
-        `Arrive via ${inboundFlight.airline} ${inboundFlight.flightNumber} at ${inboundFlight.arrive.airportName} (${inboundFlight.arrive.airportIata})`,
-        safeTime(inboundFlight.arrive.time)
-      )
-    );
-  }
-
-  const checkInHotel = pickCheckInHotel(hotels, tripStartDate);
-  if (checkInHotel !== null) {
-    rows.push({
-      place: `Hotel check-in: ${checkInHotel.name}`,
-      kind: "hotel",
-    });
-  }
-
-  return rows;
-}
-
-function buildAutoEndRows(
-  flights: TripFlight[],
-  hotels: TripHotel[],
-  tripEndDate: string
-): TripItineraryRow[] {
-  const rows: TripItineraryRow[] = [];
-
-  const checkOutHotel = pickCheckOutHotel(hotels, tripEndDate);
-  if (checkOutHotel !== null) {
-    rows.push(createItineraryRow("hotel", `Hotel check-out: ${checkOutHotel.name}`));
-  }
-
-  const outboundFlight = pickOutboundFlight(flights, tripEndDate);
-  if (outboundFlight !== null) {
-    rows.push(
-      createItineraryRow(
-        "flight",
-        `Depart via ${outboundFlight.airline} ${outboundFlight.flightNumber} from ${outboundFlight.depart.airportName} (${outboundFlight.depart.airportIata})`,
-        safeTime(outboundFlight.depart.time)
-      )
-    );
-  }
-
-  return rows;
-}
-
-function getBlockTime(block: WanderlogBlock): string | undefined {
-  const record = safeObject(block);
-  if (record === null) return undefined;
-  return safeTime(record["time"]) ?? safeTime(record["startTime"]);
-}
-
-function isWanderlogBlock(val: unknown): val is WanderlogBlock {
-  const record = safeObject(val);
-  return record !== null && typeof record["type"] === "string";
+  return {
+    name: safeString(geo["name"]),
+    countryName: safeString(geo["countryName"]),
+  };
 }
 
 // ─── Section Extractors ──────────────────────────────────────────────────────
@@ -349,68 +197,6 @@ function extractPlaces(section: WanderlogSection): TripPlace[] {
     }));
 }
 
-function extractItineraryDays(
-  sections: readonly (WanderlogSection | unknown)[],
-  flights: TripFlight[],
-  hotels: TripHotel[],
-  tripStartDate: string,
-  tripEndDate: string
-): TripItineraryDay[] {
-  const daySections = sections.slice(4);
-
-  return daySections
-    .map((section, index): TripItineraryDay | null => {
-      const daySection = safeObject(section);
-      if (daySection === null || !Array.isArray(daySection["blocks"])) {
-        return null;
-      }
-
-      const rawHeading = safeString(daySection["heading"]);
-      const headingDate = rawHeading !== null ? parseDayDate(rawHeading) : null;
-      const date = headingDate ?? addDays(tripStartDate, index);
-      const label = buildDayLabel(index, date);
-      const rows: TripItineraryRow[] = [];
-
-      for (const rawBlock of daySection["blocks"] as unknown[]) {
-        if (!isWanderlogBlock(rawBlock)) {
-          continue;
-        }
-        const block = rawBlock;
-        if (isPlaceBlock(block)) {
-          rows.push(
-            createItineraryRow(
-              "place",
-              safeString(block.place.name) ?? safeString(block.place.formatted_address) ?? "Unspecified place",
-              getBlockTime(block)
-            )
-          );
-          continue;
-        }
-
-        if (isChecklistBlock(block)) {
-          const title = safeString(block.title);
-          if (title !== null) {
-            rows.push(createItineraryRow("checklist", title, getBlockTime(block)));
-          }
-        }
-      }
-
-      if (index === 0) {
-        rows.unshift(...buildAutoStartRows(flights, hotels, tripStartDate));
-      }
-      if (index === daySections.length - 1) {
-        rows.push(...buildAutoEndRows(flights, hotels, tripEndDate));
-      }
-
-      if (rows.length === 0) {
-        return null;
-      }
-
-      return { label, date, rows };
-    })
-    .filter((day): day is TripItineraryDay => day !== null);
-}
-
 // ─── Main Extractor ──────────────────────────────────────────────────────────
 
 export function extractTripData(mobxState?: unknown): ExtractionResult {
@@ -427,6 +213,7 @@ export function extractTripData(mobxState?: unknown): ExtractionResult {
   try {
     const tripPlan = state.tripPlanStore.data.tripPlan;
     const sections = tripPlan.itinerary.sections;
+    const geoDestination = extractGeoDestination(state);
 
     // Resolve sections by heading keyword with index fallback
     const flightSection = resolveSection(sections, "flights", 1);
@@ -444,8 +231,11 @@ export function extractTripData(mobxState?: unknown): ExtractionResult {
     const flights = flightSection !== null ? extractFlights(flightSection) : [];
     const hotels = hotelSection !== null ? extractHotels(hotelSection) : [];
     const places = placeSection !== null ? extractPlaces(placeSection) : [];
-    const itineraryDays = extractItineraryDays(
+    const itineraryDays = extractItineraryDaysFromWanderlog(
       sections,
+      flightSection,
+      hotelSection,
+      placeSection,
       flights,
       hotels,
       tripPlan.startDate,
@@ -456,6 +246,8 @@ export function extractTripData(mobxState?: unknown): ExtractionResult {
       name: safeTripTitle(tripPlan.title),
       startDate: tripPlan.startDate,
       endDate: tripPlan.endDate,
+      destinationGeoName: geoDestination.name,
+      destinationGeoCountryName: geoDestination.countryName,
       flights,
       hotels,
       places,

@@ -48,6 +48,8 @@ export interface TripItineraryRow {
   time?: string;
   place: string;
   kind: TripItineraryRowKind;
+  /** Wanderlog block id when the row comes from a day-section block. */
+  wanderlogBlockId?: number;
 }
 
 export interface TripItineraryDay {
@@ -60,6 +62,8 @@ export interface TripData {
   name: string;
   startDate: string;          // "YYYY-MM-DD"
   endDate: string;            // "YYYY-MM-DD"
+  destinationGeoName: string | null;
+  destinationGeoCountryName: string | null;
   flights: TripFlight[];
   hotels: TripHotel[];
   places: TripPlace[];

@@ -1,0 +1,161 @@
+@import "tailwindcss";
+
+@source "./**/*.{ts,tsx}";
+
+/* ── Noto Sans (same family the PDF uses) ────────────────────────────────
+ * TTF files are copied from /public/fonts into /dist/fonts by webpack's
+ * CopyPlugin. Using root-relative URLs so css-loader treats them as
+ * external references (and so the extension resolves them against its own
+ * chrome-extension://<id>/ origin at runtime).
+ */
+@font-face {
+  font-family: "Noto Sans";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/NotoSans-Regular.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Noto Sans";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/NotoSans-Italic.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Noto Sans";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/NotoSans-Bold.ttf") format("truetype");
+}
+
+/* ── Design token bridge ───────────────────────────────────────────────────
+ * These CSS variables are generated off `src/design/tokens.ts`. Kept here so
+ * Tailwind's arbitrary-value syntax (e.g. `bg-[var(--c-surface)]`) reads
+ * the same constants the PDF's StyleSheet does.
+ */
+:root {
+  /* Colors */
+  --c-black: #0f0f0f;
+  --c-dark-gray: #333333;
+  --c-mid-gray: #666666;
+  --c-light-gray: #999999;
+  --c-rule: #dddddd;
+  --c-rule-light: #eeeeee;
+  --c-surface: #f7f7f7;
+  --c-surface-dark: #efefef;
+  --c-white: #ffffff;
+  --c-accent: #1a1a1a;
+
+  /* Page geometry (1pt = 1.333…px at 96dpi) */
+  --page-width: 793.7px;   /* 595pt */
+  --page-height: 1122.7px; /* 842pt */
+  --page-padding-top: 69.3px;    /* 52pt */
+  --page-padding-bottom: 69.3px; /* 52pt */
+  --page-padding-x: 74.7px;      /* 56pt */
+  --page-footer-bottom: 32px;    /* 24pt */
+
+  /* Gutter around the paper in the editor */
+  --canvas-bg: #e5e5e5;
+}
+
+/* Base page styling for the editor tab. */
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family:
+    "Noto Sans",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    Oxygen,
+    Ubuntu,
+    Cantarell,
+    "Open Sans",
+    "Helvetica Neue",
+    sans-serif;
+  color: var(--c-black);
+  background-color: #fafafa;
+}
+
+/* ── Paper canvas ─────────────────────────────────────────────────────────
+ * The editor's WYSIWYG shell. Fixed at A4 width (595pt = 793.7px) so the
+ * rendered content matches one PDF page margin-for-margin.
+ */
+.listo-paper {
+  width: var(--page-width);
+  min-height: var(--page-height);
+  background-color: var(--c-white);
+  color: var(--c-black);
+  padding: var(--page-padding-top) var(--page-padding-x) var(--page-padding-bottom);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 8px 24px rgba(0, 0, 0, 0.08);
+  position: relative;
+  font-family: "Noto Sans", sans-serif;
+}
+
+/* ── Borderless inline inputs ────────────────────────────────────────────
+ * The whole point of the WYSIWYG refactor: fields that look like PDF
+ * typography at rest, reveal edit affordance on hover/focus.
+ */
+.listo-edit {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  line-height: inherit;
+  padding: 0;
+  margin: 0;
+  width: 100%;
+  /* 1px inset ring reserved at all times so focus doesn't shift layout. */
+  box-shadow: inset 0 0 0 1px transparent;
+  border-radius: 2px;
+  transition: box-shadow 120ms ease, background-color 120ms ease;
+}
+
+.listo-edit:hover {
+  box-shadow: inset 0 0 0 1px var(--c-rule);
+}
+
+.listo-edit:focus {
+  box-shadow: inset 0 0 0 1px var(--c-accent);
+  background-color: rgba(255, 255, 255, 0.8);
+}
+
+.listo-edit::placeholder {
+  color: var(--c-light-gray);
+  font-style: italic;
+}
+
+/* Preserve the native calendar/clock UI spacing on date/time fields. */
+.listo-edit[type="date"],
+.listo-edit[type="time"] {
+  color-scheme: light;
+}
+
+/* Remove Chrome's default spinner arrows on number-like inputs inside cells. */
+.listo-edit[type="number"]::-webkit-outer-spin-button,
+.listo-edit[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* ── Drag-over drop zone highlight for the itinerary table ─────────────── */
+.listo-drop-target {
+  background-color: rgba(26, 26, 26, 0.04);
+  outline: 1px dashed var(--c-accent);
+  outline-offset: -1px;
+}

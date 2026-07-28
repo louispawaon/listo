@@ -1,20 +1,21 @@
 /**
  * Content script — runs on wanderlog.com/plan/* pages.
- * Injects a floating export button into the page.
- * PDF stack is bundled into this script so webpack does not load numbered chunks
- * from the wrong origin (page CSP / Wanderlog’s own chunk URLs).
+ * Injects a floating "Open in Listo" button. On click, reads the Wanderlog
+ * MobX store via the background bridge, hydrates a ListoDocument, stashes it
+ * in chrome.storage.local, and asks the background worker to open the editor
+ * tab (content scripts cannot call chrome.tabs directly).
  */
 
 import { extractTripData } from "../lib/extractor";
-import { generateAndDownloadPDF, type GenerationResult } from "../pdf/generator";
+import { initEditorState } from "../lib/initEditorState";
 import { readMobXStateFromPage } from "./readPageMobx";
 
-const BUTTON_ID = "wanderlog-exporter-btn";
+const BUTTON_ID = "listo-open-editor-btn";
 
-function createExportButton(): HTMLButtonElement {
+function createOpenButton(): HTMLButtonElement {
   const btn = document.createElement("button");
   btn.id = BUTTON_ID;
-  btn.textContent = "⬇ Export PDF";
+  btn.textContent = "Open in Listo";
 
   Object.assign(btn.style, {
     position: "fixed",
@@ -50,17 +51,17 @@ function setButtonState(
 ): void {
   switch (state) {
     case "idle":
-      btn.textContent = "⬇ Export PDF";
+      btn.textContent = "Open in Listo";
       btn.disabled = false;
       btn.style.backgroundColor = "#1a1a1a";
       break;
     case "loading":
-      btn.textContent = "Generating...";
+      btn.textContent = "Preparing…";
       btn.disabled = true;
       btn.style.backgroundColor = "#555555";
       break;
     case "error":
-      btn.textContent = "Export Failed";
+      btn.textContent = "Couldn't open";
       btn.disabled = false;
       btn.style.backgroundColor = "#cc3333";
       setTimeout(() => { setButtonState(btn, "idle"); }, 3000);
@@ -68,7 +69,22 @@ function setButtonState(
   }
 }
 
-async function handleExport(btn: HTMLButtonElement): Promise<void> {
+type OpenEditorResponse =
+  | { ok: true }
+  | { ok: false; error: string }
+  | undefined;
+
+async function requestOpenEditor(): Promise<void> {
+  const response = (await chrome.runtime.sendMessage({ type: "OPEN_EDITOR" })) as OpenEditorResponse;
+  if (response === undefined) {
+    throw new Error("No response from extension background.");
+  }
+  if (!response.ok) {
+    throw new Error(response.error);
+  }
+}
+
+async function handleOpenEditor(btn: HTMLButtonElement): Promise<void> {
   setButtonState(btn, "loading");
 
   let mobxState: unknown;
@@ -76,31 +92,26 @@ async function handleExport(btn: HTMLButtonElement): Promise<void> {
     mobxState = await readMobXStateFromPage();
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Could not read page MobX state.";
-    console.error("[Wanderlog Exporter]", msg);
+    console.error("[Listo]", msg);
     setButtonState(btn, "error");
     return;
   }
 
   const extraction = extractTripData(mobxState);
-
   if (!extraction.success) {
-    console.error("[Wanderlog Exporter]", extraction.error);
+    console.error("[Listo]", extraction.error);
     setButtonState(btn, "error");
     return;
   }
 
-  let generation: GenerationResult;
+  const doc = initEditorState(extraction.data, { wanderlogUrl: window.location.href });
+
   try {
-    generation = await generateAndDownloadPDF(extraction.data);
+    await chrome.storage.local.set({ listoDoc: doc, listoSource: "extraction" });
+    await requestOpenEditor();
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to load PDF generator";
-    console.error("[Wanderlog Exporter]", message);
-    setButtonState(btn, "error");
-    return;
-  }
-
-  if (!generation.success) {
-    console.error("[Wanderlog Exporter]", generation.error);
+    const msg = err instanceof Error ? err.message : "Failed to open the editor.";
+    console.error("[Listo]", msg);
     setButtonState(btn, "error");
     return;
   }
@@ -111,12 +122,12 @@ async function handleExport(btn: HTMLButtonElement): Promise<void> {
 function inject(): void {
   if (document.getElementById(BUTTON_ID) !== null) return;
 
-  const btn = createExportButton();
-  btn.addEventListener("click", () => { void handleExport(btn); });
+  const btn = createOpenButton();
+  btn.addEventListener("click", () => { void handleOpenEditor(btn); });
   document.body.appendChild(btn);
 }
 
-// Wanderlog is an SPA — wait for the page to be interactive
+// Wanderlog is an SPA — wait for the page to be interactive.
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", inject);
 } else {
