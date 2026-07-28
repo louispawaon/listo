@@ -125,9 +125,13 @@ function readSectionDate(candidate: DaySectionCandidate): string | null {
 function createItineraryRow(
   kind: TripItineraryRow["kind"],
   place: string,
-  time?: string
+  time?: string,
+  wanderlogBlockId?: number
 ): TripItineraryRow {
-  return time !== undefined ? { kind, place, time } : { kind, place };
+  const row: TripItineraryRow = { kind, place };
+  if (time !== undefined) row.time = time;
+  if (wanderlogBlockId !== undefined) row.wanderlogBlockId = wanderlogBlockId;
+  return row;
 }
 
 function dateInTripRange(date: string, tripStart: string, tripEnd: string): boolean {
@@ -256,44 +260,6 @@ function isWanderlogBlock(val: unknown): val is WanderlogBlock {
   return record !== null && typeof record["type"] === "string";
 }
 
-/** Minutes since midnight for "HH:MM"; rows without time sort last. */
-function timeSortKey(time: string | undefined): number {
-  if (time === undefined) return 24 * 60 + 1;
-  const m = time.match(/^(\d{1,2}):(\d{2})/);
-  if (m === null) return 24 * 60 + 1;
-  const h = Number(m[1]);
-  const min = Number(m[2]);
-  if (!Number.isFinite(h) || !Number.isFinite(min)) return 24 * 60 + 1;
-  return h * 60 + min;
-}
-
-function kindOrder(kind: TripItineraryRow["kind"]): number {
-  switch (kind) {
-    case "flight":
-      return 0;
-    case "hotel":
-      return 1;
-    case "place":
-      return 2;
-    case "checklist":
-      return 3;
-    default:
-      return 9;
-  }
-}
-
-function sortRowsForDay(rows: TripItineraryRow[]): void {
-  rows.sort((a, b) => {
-    const ta = timeSortKey(a.time);
-    const tb = timeSortKey(b.time);
-    if (ta !== tb) return ta - tb;
-    const ka = kindOrder(a.kind);
-    const kb = kindOrder(b.kind);
-    if (ka !== kb) return ka - kb;
-    return a.place.localeCompare(b.place);
-  });
-}
-
 /**
  * Merges Wanderlog per-day blocks with flight/hotel rows keyed by ISO date.
  */
@@ -359,7 +325,8 @@ export function extractItineraryDaysFromWanderlog(
           createItineraryRow(
             "place",
             safeString(block.place.name) ?? safeString(block.place.formatted_address) ?? "Unspecified place",
-            getBlockTime(block)
+            getBlockTime(block),
+            block.id
           )
         );
         continue;
@@ -368,7 +335,7 @@ export function extractItineraryDaysFromWanderlog(
       if (isChecklistBlock(block)) {
         const title = safeString(block.title);
         if (title !== null) {
-          rows.push(createItineraryRow("checklist", title, getBlockTime(block)));
+          rows.push(createItineraryRow("checklist", title, getBlockTime(block), block.id));
         }
       }
     }
@@ -394,7 +361,6 @@ export function extractItineraryDaysFromWanderlog(
     if (date === undefined) continue;
     const rows = byDate.get(date);
     if (rows === undefined || rows.length === 0) continue;
-    sortRowsForDay(rows);
     days.push({
       label: buildDayLabel(i, date),
       date,

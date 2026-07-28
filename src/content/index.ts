@@ -104,7 +104,7 @@ async function handleOpenEditor(btn: HTMLButtonElement): Promise<void> {
     return;
   }
 
-  const doc = initEditorState(extraction.data);
+  const doc = initEditorState(extraction.data, { wanderlogUrl: window.location.href });
 
   try {
     await chrome.storage.local.set({ listoDoc: doc, listoSource: "extraction" });

@@ -475,15 +475,12 @@ function PlaneIcon(): React.ReactElement {
     <svg
       width="14"
       height="14"
-      viewBox="0 0 20 20"
-      fill="none"
+      viewBox="0 0 24 24"
+      fill="currentColor"
       aria-hidden="true"
-      style={{ color: "var(--c-mid-gray)", flexShrink: 0, margin: "0 4pt" }}
+      style={{ color: "var(--c-mid-gray)", flexShrink: 0, margin: "0 4pt", transform: "scaleX(-1)" }}
     >
-      <path
-        d="M2 10L9 7l1-5 2 1-1 4.5 4-1.5 1 1-3.5 2 1 4-1.5.5L11 10l-4 2L7 14l-1.5.5L4 11 2 10z"
-        fill="currentColor"
-      />
+      <path d="M16 3h-2l-5 8H3.5c-.83 0-1.5.67-1.5 1.5S2.67 14 3.5 14H9l5 8h2l-2.5-8H19l1.5 2H22l-1-3.5 1-3.5h-1.5L19 11h-5.5l2.5-8z" />
     </svg>
   );
 }
@@ -493,15 +490,12 @@ function PlaneIconSmall(): React.ReactElement {
     <svg
       width="10"
       height="10"
-      viewBox="0 0 20 20"
-      fill="none"
+      viewBox="0 0 24 24"
+      fill="currentColor"
       aria-hidden="true"
-      style={{ color: "currentColor", flexShrink: 0 }}
+      style={{ color: "currentColor", flexShrink: 0, transform: "scaleX(-1)" }}
     >
-      <path
-        d="M2 10L9 7l1-5 2 1-1 4.5 4-1.5 1 1-3.5 2 1 4-1.5.5L11 10l-4 2L7 14l-1.5.5L4 11 2 10z"
-        fill="currentColor"
-      />
+      <path d="M16 3h-2l-5 8H3.5c-.83 0-1.5.67-1.5 1.5S2.67 14 3.5 14H9l5 8h2l-2.5-8H19l1.5 2H22l-1-3.5 1-3.5h-1.5L19 11h-5.5l2.5-8z" />
     </svg>
   );
 }

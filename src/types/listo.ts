@@ -21,6 +21,8 @@ export interface ListoDocument {
   version: 1;
   savedAt: string;
   source: ListoSource;
+  /** Wanderlog plan URL at extraction time; used to pick the correct tab on sync. */
+  wanderlogUrl?: string;
   meta: TripMeta;
   sections: ListoSection[];
   /**
@@ -77,6 +79,8 @@ export interface ListoFlightBlock {
   id: string;
   type: "flight";
   order: number;
+  /** Wanderlog block id; set during extraction for sync matching. */
+  wanderlogId?: number;
   airline: string;
   flightNumber: string;
   depart: ListoFlightEndpoint;
@@ -87,6 +91,8 @@ export interface ListoHotelBlock {
   id: string;
   type: "hotel";
   order: number;
+  /** Wanderlog block id; set during extraction for sync matching. */
+  wanderlogId?: number;
   name: string;
   address: string;
   checkIn: string;
@@ -100,6 +106,8 @@ export interface ListoPlaceBlock {
   id: string;
   type: "place";
   order: number;
+  /** Wanderlog block id; set during extraction for sync matching. */
+  wanderlogId?: number;
   name: string;
   address: string;
   rating: number;
@@ -148,4 +156,6 @@ export interface ManualActivity {
   label: string;
   time: string | undefined;
   notes: string | undefined;
+  /** Stable key from Wanderlog row; set during extraction for sync matching. */
+  wanderlogKey?: string;
 }

@@ -16,6 +16,7 @@ import {
   Svg,
   Path,
   Rect,
+  G,
 } from "@react-pdf/renderer";
 import type {
   Activity,
@@ -581,7 +582,7 @@ const FLIGHT_BARCODE_WIDTHS = [
 ] as const;
 
 const PLANE_PATH =
-  "M2 10L9 7l1-5 2 1-1 4.5 4-1.5 1 1-3.5 2 1 4-1.5.5L11 10l-4 2L7 14l-1.5.5L4 11 2 10z";
+  "M16 3h-2l-5 8H3.5c-.83 0-1.5.67-1.5 1.5S2.67 14 3.5 14H9l5 8h2l-2.5-8H19l1.5 2H22l-1-3.5 1-3.5h-1.5L19 11h-5.5l2.5-8z";
 
 function FlightBarcodePdf(): React.ReactElement {
   const rects: React.ReactElement[] = [];
@@ -636,8 +637,10 @@ function FlightCardView({ flight }: { flight: ListoFlightBlock }): React.ReactEl
       <View style={styles.flightCardHeader}>
         <Text style={styles.flightCardHeaderLeft}>Boarding Pass</Text>
         <View style={styles.flightCardHeaderRight}>
-          <Svg width={10} height={10} viewBox="0 0 20 20">
-            <Path d={PLANE_PATH} fill={COLOR.white} />
+          <Svg width={10} height={10} viewBox="0 0 24 24">
+            <G transform="scale(-1, 1) translate(-24, 0)">
+              <Path d={PLANE_PATH} fill={COLOR.white} />
+            </G>
           </Svg>
           <Text style={styles.flightCardHeaderRightText}>Flight Segment</Text>
         </View>
@@ -649,8 +652,10 @@ function FlightCardView({ flight }: { flight: ListoFlightBlock }): React.ReactEl
           <Text style={styles.flightNumber}>{flight.flightNumber}</Text>
           <View style={styles.flightDashedRow}>
             <View style={styles.flightDashSegment} />
-            <Svg width={14} height={14} viewBox="0 0 20 20" style={{ marginHorizontal: 4 }}>
-              <Path d={PLANE_PATH} fill={COLOR.midGray} />
+            <Svg width={14} height={14} viewBox="0 0 24 24" style={{ marginHorizontal: 4 }}>
+              <G transform="scale(-1, 1) translate(-24, 0)">
+                <Path d={PLANE_PATH} fill={COLOR.midGray} />
+              </G>
             </Svg>
             <View style={styles.flightDashSegment} />
           </View>

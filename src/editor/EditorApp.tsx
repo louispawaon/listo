@@ -35,6 +35,7 @@ import { ItineraryTableEditor } from "./components/pdf-styled/ItineraryTableEdit
 import { useEditorState, createManualActivity } from "./hooks/useEditorState";
 import { useAutoSave } from "./hooks/useAutoSave";
 import { loadListoFile, saveListoFile } from "./hooks/useListoFile";
+import { useWanderlogRefresh } from "./hooks/useWanderlogRefresh";
 import { clearAutosave } from "./storage";
 import {
   buildPaperSortIds,
@@ -164,6 +165,12 @@ function SortableSection({ id, children }: SortableSectionProps): React.ReactEle
 export function EditorApp({ initialDoc }: EditorAppProps): React.ReactElement {
   const { doc, actions } = useEditorState(initialDoc);
   const { savedAt } = useAutoSave(doc);
+  const {
+    syncing: syncPending,
+    message: syncMessage,
+    error: syncError,
+    sync: syncFromWanderlog,
+  } = useWanderlogRefresh(doc, actions);
 
   const [exportPending, setExportPending] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -249,6 +256,10 @@ export function EditorApp({ initialDoc }: EditorAppProps): React.ReactElement {
         onLoad={() => {
           void handleLoad();
         }}
+        onSyncFromWanderlog={syncFromWanderlog}
+        syncPending={syncPending}
+        syncMessage={syncMessage}
+        syncError={syncError}
         onExportPdf={() => {
           void handleExportPdf();
         }}

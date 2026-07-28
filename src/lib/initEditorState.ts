@@ -106,6 +106,7 @@ function buildFlightBlocks(tripData: TripData): ListoFlightBlock[] {
     id: uuid(),
     type: "flight",
     order: index,
+    wanderlogId: flight.id,
     airline: flight.airline,
     flightNumber: flight.flightNumber,
     depart: { ...flight.depart },
@@ -118,6 +119,7 @@ function buildHotelBlocks(tripData: TripData): ListoHotelBlock[] {
     id: uuid(),
     type: "hotel",
     order: index,
+    wanderlogId: hotel.id,
     name: hotel.name,
     address: hotel.address,
     checkIn: hotel.checkIn,
@@ -133,6 +135,7 @@ function buildPlaceBlocks(tripData: TripData): ListoPlaceBlock[] {
     id: uuid(),
     type: "place",
     order: index,
+    wanderlogId: place.id,
     name: place.name,
     address: place.address,
     rating: place.rating,
@@ -199,7 +202,24 @@ function mapRowKindToManualKind(kind: TripItineraryRow["kind"]): ManualActivityK
   }
 }
 
-function toManualActivity(row: TripItineraryRow, order: number): ManualActivity {
+/** Stable key for matching itinerary rows across Wanderlog syncs. */
+export function buildWanderlogActivityKey(
+  date: string | null,
+  row: TripItineraryRow
+): string {
+  if (row.wanderlogBlockId !== undefined) {
+    return `block:${row.wanderlogBlockId}`;
+  }
+  const datePart = date ?? "";
+  const timePart = row.time ?? "";
+  return `${datePart}|${timePart}|${row.place}|${row.kind}`;
+}
+
+function toManualActivity(
+  date: string | null,
+  row: TripItineraryRow,
+  order: number
+): ManualActivity {
   return {
     id: uuid(),
     source: "manual",
@@ -208,6 +228,7 @@ function toManualActivity(row: TripItineraryRow, order: number): ManualActivity 
     label: row.place,
     time: row.time,
     notes: undefined,
+    wanderlogKey: buildWanderlogActivityKey(date, row),
   };
 }
 
@@ -222,7 +243,7 @@ function buildDays(tripData: TripData): TripDay[] {
       date: day.date,
       label: day.label,
       order: index,
-      activities: day.rows.map((row, rowIndex) => toManualActivity(row, rowIndex)),
+      activities: day.rows.map((row, rowIndex) => toManualActivity(day.date, row, rowIndex)),
     }));
   }
 
@@ -246,19 +267,28 @@ function buildDays(tripData: TripData): TripDay[] {
       date,
       label: formatDayLabel(date, index),
       order: index,
-      activities: rows.map((row, rowIndex) => toManualActivity(row, rowIndex)),
+      activities: rows.map((row, rowIndex) => toManualActivity(date, row, rowIndex)),
     };
   });
 }
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
-export function initEditorState(tripData: TripData): ListoDocument {
+export interface InitEditorStateOptions {
+  wanderlogUrl?: string;
+}
+
+export function initEditorState(
+  tripData: TripData,
+  options?: InitEditorStateOptions
+): ListoDocument {
   const sections = buildSections(tripData);
+  const wanderlogUrl = options?.wanderlogUrl;
   return {
     version: 1,
     savedAt: new Date().toISOString(),
     source: "wanderlog",
+    ...(wanderlogUrl !== undefined ? { wanderlogUrl } : {}),
     meta: buildMeta(tripData),
     sections,
     itineraryIndex: sections.length,

@@ -1,9 +1,8 @@
 /**
  * Debounced autosave of the current editor document into chrome.storage.local.
  *
- * The debounce window is short enough that an accidental tab close loses at
- * most a few seconds of edits, but long enough to avoid hammering the storage
- * API on every keystroke.
+ * Also persists immediately when the editor session starts and on tab close so
+ * a browser refresh can resume the open document.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -12,11 +11,34 @@ import { writeAutosave } from "../storage";
 
 const DEBOUNCE_MS = 5_000;
 
+async function persistDoc(doc: ListoDocument): Promise<void> {
+  await writeAutosave({ ...doc, savedAt: new Date().toISOString() });
+}
+
 export function useAutoSave(doc: ListoDocument): { savedAt: Date | null } {
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const timeoutRef = useRef<number | null>(null);
-  // Skip the first render: the doc was just loaded and hasn't changed yet.
+  const docRef = useRef(doc);
+  docRef.current = doc;
   const firstRun = useRef(true);
+
+  useEffect(() => {
+    void persistDoc(doc).then(() => {
+      setSavedAt(new Date());
+    }).catch((err: unknown) => {
+      console.error("[Listo] initial autosave failed", err);
+    });
+  }, []);
+
+  useEffect(() => {
+    const handleBeforeUnload = (): void => {
+      void persistDoc(docRef.current);
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, []);
 
   useEffect(() => {
     if (firstRun.current) {
@@ -31,7 +53,7 @@ export function useAutoSave(doc: ListoDocument): { savedAt: Date | null } {
     timeoutRef.current = window.setTimeout(() => {
       void (async () => {
         try {
-          await writeAutosave({ ...doc, savedAt: new Date().toISOString() });
+          await persistDoc(doc);
           setSavedAt(new Date());
         } catch (err) {
           console.error("[Listo] autosave failed", err);

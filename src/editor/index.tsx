@@ -5,7 +5,7 @@
  *
  * On mount we check `chrome.storage.local` in priority order:
  *   1. Fresh extraction handoff from the content script → adopt and clear.
- *   2. Autosave blob from a previous editor session → offer to resume.
+ *   2. Autosave blob from a previous editor session → resume in the editor.
  *   3. Neither → render the landing state (load .listo / go to Wanderlog).
  */
 
@@ -43,7 +43,12 @@ function Root(): React.ReactElement {
           return;
         }
 
-        setState({ phase: "landing", recoveryDoc: autosaveDoc });
+        if (autosaveDoc !== null) {
+          setState({ phase: "editor", doc: autosaveDoc, hadRecovery: true });
+          return;
+        }
+
+        setState({ phase: "landing", recoveryDoc: null });
       } catch (err) {
         console.error("[Listo] bootstrap failed", err);
         if (!cancelled) {
