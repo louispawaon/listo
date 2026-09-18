@@ -24,6 +24,7 @@ import type {
   TripPlace,
 } from "../types/trip";
 import { extractItineraryDaysFromWanderlog } from "./itineraryFromWanderlog";
+import { isIsoDateString } from "./calendarDates";
 
 // ─── Section Heading Keywords ────────────────────────────────────────────────
 // Matched case-insensitively. Extend if Wanderlog ever localises headings.
@@ -51,7 +52,8 @@ function resolveSection(
   kind: SectionKind,
   fallbackIndex: number
 ): WanderlogSection | null {
-  // Try heading match first
+  // Try heading match first (dated day sections are never overviews,
+  // even when the custom title starts with a keyword like "Flight to MNL Day").
   for (const section of sections) {
     if (
       section !== null &&
@@ -62,7 +64,11 @@ function resolveSection(
       Array.isArray((section as WanderlogSection).blocks) &&
       matchesSectionKind((section as WanderlogSection).heading, kind)
     ) {
-      return section as WanderlogSection;
+      const candidate = section as WanderlogSection;
+      if (typeof candidate.date === "string" && isIsoDateString(candidate.date)) {
+        continue;
+      }
+      return candidate;
     }
   }
 

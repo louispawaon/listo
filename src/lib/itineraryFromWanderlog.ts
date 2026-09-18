@@ -111,7 +111,9 @@ function collectDaySections(
     const section = sections[i];
     if (!isWanderlogSectionShape(section)) continue;
     const heading = section.heading;
-    if (!isDayLikeSection(section, heading)) continue;
+    const sectionDate = safeString(section.date);
+    const isDatedDay = sectionDate !== null && isIsoDateString(sectionDate);
+    if (!isDatedDay && !isDayLikeSection(section, heading)) continue;
     out.push({ section, originalIndex: i });
   }
   return out;
