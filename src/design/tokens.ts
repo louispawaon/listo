@@ -148,6 +148,7 @@ export const LINE_HEIGHT = {
   placeAddress: 1.4,
   noteContent: 1.4,
   itineraryPlace: 1.35,
+  itineraryNotes: 1.35,
 } as const;
 
 // ─── Page & spacing (in pt) ──────────────────────────────────────────────────

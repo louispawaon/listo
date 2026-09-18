@@ -528,8 +528,11 @@ const styles = StyleSheet.create({
     fontSize: TYPE.itineraryKind,
     color: COLOR.midGray,
   },
-  itineraryPlace: {
+  itineraryPlaceWrap: {
     flex: 1,
+    minWidth: 0,
+  },
+  itineraryPlace: {
     fontSize: TYPE.itineraryPlace,
     color: COLOR.black,
     lineHeight: LINE_HEIGHT.itineraryPlace,
@@ -537,8 +540,8 @@ const styles = StyleSheet.create({
   itineraryNotes: {
     fontSize: TYPE.itineraryNotes,
     color: COLOR.midGray,
-    marginTop: SPACE.itineraryNotesMarginTop,
     fontStyle: STYLE.italic,
+    lineHeight: LINE_HEIGHT.itineraryNotes,
   },
   itineraryEmptyDay: {
     paddingVertical: SPACE.itineraryDayPaddingY,
@@ -884,13 +887,17 @@ function ItineraryTableView({ days }: { days: TripDay[] }): React.ReactElement {
               <View key={activity.id} style={styles.itineraryRow}>
                 <Text style={styles.itineraryTime}>{formatActivityTime(activity)}</Text>
                 <Text style={styles.itineraryKind}>{activityKindLabel(activity)}</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.itineraryPlace}>{activity.label}</Text>
-                  {activity.source === "manual" &&
-                    activity.notes !== undefined &&
-                    activity.notes !== "" && (
-                      <Text style={styles.itineraryNotes}>{activity.notes}</Text>
-                    )}
+                <View style={styles.itineraryPlaceWrap}>
+                  <Text style={styles.itineraryPlace}>
+                    {activity.label}
+                    {activity.source === "manual" &&
+                      activity.notes !== undefined &&
+                      activity.notes !== "" && (
+                        <Text style={styles.itineraryNotes}>
+                          {"\n" + activity.notes}
+                        </Text>
+                      )}
+                  </Text>
                 </View>
               </View>
             ))
